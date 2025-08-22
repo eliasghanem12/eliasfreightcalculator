@@ -49,6 +49,20 @@ export async function mockProductLookupByName(q:{name:string; brand?:string; sku
   const weight_g = 1200 + (seed%2000);
   return { ...dims, weight_g, confidence: 0.8, source_url: "https://example.com/specs" };
 }
+export async function getUploadUrl(file: File) {
+  const res = await fetch(`${import.meta.env.VITE_API_BASE}/upload-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name, contentType: file.type })
+  });
+  if (!res.ok) throw new Error("Failed to get upload URL");
+  return res.json() as Promise<{ url: string; key: string; quoteId: string }>;
+}
+
+export async function putToS3Presigned(url: string, file: File) {
+  const r = await fetch(url, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  if (!r.ok) throw new Error(`Upload failed: ${r.status}`);
+}
 
 export function productsToParcels(products: {l_mm?:number; w_mm?:number; h_mm?:number; weight_g?:number; qty:number}[]) {
   const parcels = [];
