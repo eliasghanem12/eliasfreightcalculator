@@ -71,23 +71,39 @@ export default function QuoteNew() {
   const [uploadedQuoteId, setUploadedQuoteId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setQuoteFileName(file.name);
 
     try {
-      setUploadState("signing");
-      const { url, quoteId } = await getUploadUrl(file);
       setUploadState("uploading");
-      await putToS3Presigned(url, file);
-      setUploadedQuoteId(quoteId);
+      const parsed = await parseQuoteFile(file);
+
+      // Populate products table with parsed items
+      const hwProducts = parsed
+        .filter(p => p.type === "hardware")
+        .map(p => ({
+          name: p.model ? `${p.name} (${p.model})` : p.name,
+          brand: "",
+          sku: p.model ?? "",
+          qty: p.qty,
+          l_mm: undefined,
+          w_mm: undefined,
+          h_mm: undefined,
+          weight_g: p.weight > 0 ? Math.round(p.weight * 453.592) : undefined,
+        }));
+
+      if (hwProducts.length > 0) {
+        setValue("products", hwProducts);
+      }
+
       setUploadState("done");
+      setUploadedQuoteId(`${parsed.length} items parsed (${parsed.filter(p=>p.type==="hardware").length} HW, ${parsed.filter(p=>p.type==="software").length} SW)`);
     } catch (err) {
       console.error(err);
       setUploadState("error");
     } finally {
-      // allow re-selecting the same filename
       e.target.value = "";
     }
   };
