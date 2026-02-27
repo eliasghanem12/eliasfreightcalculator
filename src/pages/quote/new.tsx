@@ -3,9 +3,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { quoteSchema, type QuoteFormValues } from "../../lib/validation";
 import { useMemo, useState, useRef } from "react";
-import { mockQuote, mockProductLookupByName, productsToParcels } from "../../lib/mockApi";
-// ⬇️ use the real API helpers we created for S3 presigned uploads
-import { getUploadUrl, putToS3Presigned } from "../../lib/mockApi";
+import { mockQuote, mockProductLookupByName, productsToParcels, parseQuoteFile } from "../../lib/mockApi";
 import type { Rate, QuoteRequest, Parcel, Product } from "../../lib/types";
 import {
   AIRPORTS,
