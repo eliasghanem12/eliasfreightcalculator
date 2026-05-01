@@ -3,7 +3,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { quoteSchema, type QuoteFormValues } from "../../lib/validation";
 import { useMemo, useState, useRef } from "react";
-import { mockQuote, mockProductLookupByName, productsToParcels, parseQuoteFile } from "../../lib/mockApi";
+import { getPublicRates, getSpecialRates, productsToParcels, parseQuoteFile } from "../../lib/mockApi";
 import type { Rate, QuoteRequest, Parcel, Product } from "../../lib/types";
 import {
   AIRPORTS,
@@ -19,6 +19,9 @@ const Help = ({ text }: { text: string }) => (
 
 export default function QuoteNew() {
   const [rates, setRates] = useState<Rate[] | null>(null);
+  const [specialRates, setSpecialRates] = useState<Rate[] | null>(null);
+  const [ratesMessage, setRatesMessage] = useState<string>("");
+  const [loadingRates, setLoadingRates] = useState<"" | "public" | "special">("");
 
   const {
     register,
@@ -78,9 +81,7 @@ export default function QuoteNew() {
       setUploadState("uploading");
       const parsed = await parseQuoteFile(file);
 
-    // Populate products table with ALL items (hardware + software)
       const allProducts = parsed.map(p => {
-        // Parse dimensions string "L x W x H in" into mm values
         let l_mm: number | undefined;
         let w_mm: number | undefined;
         let h_mm: number | undefined;
@@ -119,80 +120,58 @@ export default function QuoteNew() {
     }
   };
 
-  const onAutoFetch = async () => {
-    const products = [...(watch("products") ?? [])];
-    for (let i = 0; i < products.length; i++) {
-      const p = products[i];
-      if (!p?.name) continue;
-      // Only fetch dimensions for hardware items
-      if (p.itemType === "software") continue;
-      const found = await mockProductLookupByName({
+  // Build items payload for quotes endpoint
+  const buildQuotePayload = () => {
+    const products = watch("products") ?? [];
+    const items = products
+      .filter(p => p?.name && p.qty > 0)
+      .map(p => ({
         name: p.name,
-        brand: p.brand,
-        sku: p.sku,
-      });
-      products[i] = { ...p, ...found };
-    }
-    setValue("products", products);
-
-    // Only convert hardware items to parcels
-    const hwProducts = products.filter(p => p.itemType !== "software");
-    const parcels = productsToParcels(
-      hwProducts.map((p) => ({
+        type: p.itemType || "hardware",
+        qty: p.qty,
+        weight_g: typeof p.weight_g === "number" ? p.weight_g : 0,
         l_mm: p.l_mm,
         w_mm: p.w_mm,
         h_mm: p.h_mm,
-        weight_g: p.weight_g,
-        qty: p.qty,
-      }))
-    );
-    if (parcels.length > 0) setValue("parcels", parcels);
-  };
-
-  const onSubmit = async (data: QuoteFormValues) => {
-    const parcels: Parcel[] = (data.parcels ?? [])
-      .map(p => ({
-        l_mm: p.l_mm!,
-        w_mm: p.w_mm!,
-        h_mm: p.h_mm!,
-        weight_g: p.weight_g!,
-      }))
-      .filter(p =>
-        [p.l_mm, p.w_mm, p.h_mm, p.weight_g].every(
-          n => typeof n === "number" && !Number.isNaN(n)
-        )
-      );
-
-    const products: Product[] = (data.products ?? [])
-      .filter(p => p?.name && typeof p.qty === "number" && p.qty! > 0)
-      .map(p => ({
-        name: p.name!,
-        qty: p.qty!,
-        brand: p.brand || undefined,
-        sku: p.sku || undefined,
-        l_mm: typeof p.l_mm === "number" ? p.l_mm : undefined,
-        w_mm: typeof p.w_mm === "number" ? p.w_mm : undefined,
-        h_mm: typeof p.h_mm === "number" ? p.h_mm : undefined,
-        weight_g: typeof p.weight_g === "number" ? p.weight_g : undefined,
-        confidence: typeof p.confidence === "number" ? p.confidence : undefined,
-        source_url: p.source_url || undefined,
       }));
 
-    const req: QuoteRequest = {
-      incoterm: data.incoterm!,
-      mode: data.mode!,
-      declaredValue: data.declaredValue!,
-      currency: data.currency!,
-      parcels,
-      ...(products.length ? { products } : {}),
-      origin: { country: data.origin.country!, portId: data.origin.portId || undefined },
-      destination: { country: data.destination.country!, portId: data.destination.portId || undefined },
-      options: data.options ?? {},
+    return {
+      items,
+      origin: { country: watch("origin.country") },
+      destination: { country: watch("destination.country") },
+      mode: watch("mode"),
     };
+  };
 
-    const res = await mockQuote(req);
-    setRates(res);
-    localStorage.setItem("lastQuote", JSON.stringify({ req, res }));
+  const onGetPublicRates = async () => {
+    setLoadingRates("public");
+    setRates(null);
+    setRatesMessage("");
+    try {
+      const payload = buildQuotePayload();
+      const result = await getPublicRates(payload);
+      setRates(result);
+    } catch (err: any) {
+      setRatesMessage(err.message || "Failed to get public rates");
+    } finally {
+      setLoadingRates("");
+    }
+  };
+
+  const onGetSpecialRates = async () => {
+    setLoadingRates("special");
+    setSpecialRates(null);
+    setRatesMessage("");
+    try {
+      const payload = buildQuotePayload();
+      const result = await getSpecialRates(payload);
+      setSpecialRates(result.rates);
+      if (result.message) setRatesMessage(result.message);
+    } catch (err: any) {
+      setRatesMessage(err.message || "Failed to get special rates");
+    } finally {
+      setLoadingRates("");
+    }
   };
 
   const allCountries = useMemo(
@@ -207,7 +186,7 @@ export default function QuoteNew() {
     <div className="grid gap-6">
       <h1 className="text-xl font-semibold">New Quote</h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="grid gap-5">
+      <div className="grid gap-5">
         {/* Countries */}
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -217,15 +196,12 @@ export default function QuoteNew() {
             </label>
             <select
               className="input"
-              {...register("origin.country", {
-                onChange: () => setValue("origin.portId", ""),
-              })}
+              value={watch("origin.country")}
+              onChange={(e) => { setValue("origin.country", e.target.value); setValue("origin.portId", ""); }}
             >
               <option value="">-- Select Country --</option>
               {allCountries.map(({ code, name }) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
+                <option key={code} value={code}>{name}</option>
               ))}
             </select>
           </div>
@@ -236,28 +212,25 @@ export default function QuoteNew() {
             </label>
             <select
               className="input"
-              {...register("destination.country", {
-                onChange: () => setValue("destination.portId", ""),
-              })}
+              value={watch("destination.country")}
+              onChange={(e) => { setValue("destination.country", e.target.value); setValue("destination.portId", ""); }}
             >
               <option value="">-- Select Country --</option>
               {allCountries.map(({ code, name }) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
+                <option key={code} value={code}>{name}</option>
               ))}
             </select>
           </div>
         </div>
 
-        {/* Mode / Incoterm / Declared */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Mode / Incoterm */}
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">
               Incoterm
-              <Help text="Trade term that defines who pays and where risk transfers (EXW/FOB/CIF/CIP/DDP)." />
+              <Help text="Trade term that defines who pays and where risk transfers." />
             </label>
-            <select className="input" {...register("incoterm")}>
+            <select className="input" value={watch("incoterm")} onChange={(e) => setValue("incoterm", e.target.value as any)}>
               <option>EXW</option>
               <option>FOB</option>
               <option>CIF</option>
@@ -268,16 +241,12 @@ export default function QuoteNew() {
           <div>
             <label className="text-sm font-medium">
               Mode
-              <Help text="Transport type: Air shows airports; Sea shows seaports; Road/Courier shows warehouses/cities." />
+              <Help text="Transport type: Air shows airports; Sea shows seaports; Road/Courier shows warehouses." />
             </label>
             <select
               className="input"
-              {...register("mode", {
-                onChange: () => {
-                  setValue("origin.portId", "");
-                  setValue("destination.portId", "");
-                },
-              })}
+              value={watch("mode")}
+              onChange={(e) => { setValue("mode", e.target.value as any); setValue("origin.portId", ""); setValue("destination.portId", ""); }}
             >
               <option>air</option>
               <option>sea</option>
@@ -285,43 +254,29 @@ export default function QuoteNew() {
               <option>courier</option>
             </select>
           </div>
-          
         </div>
 
-        {/* Mode-based port pickers */}
+        {/* Port pickers */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">
-              {mode === "air"
-                ? "Origin Airport"
-                : mode === "sea"
-                ? "Origin Seaport"
-                : "Origin Warehouse/City"}
+              {mode === "air" ? "Origin Airport" : mode === "sea" ? "Origin Seaport" : "Origin Warehouse/City"}
             </label>
-            <select className="input" {...register("origin.portId")}>
+            <select className="input" value={watch("origin.portId") || ""} onChange={(e) => setValue("origin.portId", e.target.value)}>
               <option value="">-- Select --</option>
               {originList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({COUNTRY_NAMES[p.country] ?? p.country})
-                </option>
+                <option key={p.id} value={p.id}>{p.name} ({COUNTRY_NAMES[p.country] ?? p.country})</option>
               ))}
             </select>
           </div>
-
           <div>
             <label className="text-sm font-medium">
-              {mode === "air"
-                ? "Destination Airport"
-                : mode === "sea"
-                ? "Destination Seaport"
-                : "Destination Warehouse/City"}
+              {mode === "air" ? "Destination Airport" : mode === "sea" ? "Destination Seaport" : "Destination Warehouse/City"}
             </label>
-            <select className="input" {...register("destination.portId")}>
+            <select className="input" value={watch("destination.portId") || ""} onChange={(e) => setValue("destination.portId", e.target.value)}>
               <option value="">-- Select --</option>
               {destList.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({COUNTRY_NAMES[p.country] ?? p.country})
-                </option>
+                <option key={p.id} value={p.id}>{p.name} ({COUNTRY_NAMES[p.country] ?? p.country})</option>
               ))}
             </select>
           </div>
@@ -342,14 +297,9 @@ export default function QuoteNew() {
               type="button"
               className="btn"
               onClick={() => fileInputRef.current?.click()}
-              title="Upload a quote file"
               disabled={uploadState === "signing" || uploadState === "uploading"}
             >
-              {uploadState === "signing"
-                ? "Preparing…"
-                : uploadState === "uploading"
-                ? "Parsing…"
-                : "Upload Quote"}
+              {uploadState === "uploading" ? "Parsing…" : "Upload Quote"}
             </button>
             {quoteFileName && (
               <span className="text-xs opacity-70">Selected: {quoteFileName}</span>
@@ -357,9 +307,7 @@ export default function QuoteNew() {
           </div>
         </div>
         {uploadState === "done" && uploadedQuoteId && (
-          <div className="text-xs text-green-700">
-            Uploaded ✅ {uploadedQuoteId}
-          </div>
+          <div className="text-xs text-green-700">Uploaded ✅ {uploadedQuoteId}</div>
         )}
         {uploadState === "error" && (
           <div className="text-xs text-red-600">Upload failed. Check console.</div>
@@ -368,22 +316,12 @@ export default function QuoteNew() {
         {/* Products table */}
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium">
-              Products
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => append({ name: "", qty: 1, itemType: "hardware" })}
-              >
-                Add Row
-              </button>
-             
-            </div>
+            <label className="text-sm font-medium">Products</label>
+            <button type="button" className="btn" onClick={() => append({ name: "", qty: 1, itemType: "hardware" })}>
+              Add Row
+            </button>
           </div>
 
-          {/* Table header */}
           <div className="grid grid-cols-12 gap-2 text-xs font-medium opacity-70 px-1">
             <div className="col-span-1">Type</div>
             <div className="col-span-3">Product Name</div>
@@ -401,55 +339,22 @@ export default function QuoteNew() {
               const isSW = itemType === "software";
               return (
                 <div key={f.id} className={`grid grid-cols-12 gap-2 items-center ${isSW ? "opacity-60" : ""}`}>
-                  {/* Type badge */}
                   <div className="col-span-1">
                     <span className={`inline-block text-xs font-semibold px-2 py-1 rounded ${
-                      isSW
-                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                        : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                    }`}>
-                      {isSW ? "SW" : "HW"}
-                    </span>
+                      isSW ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                           : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                    }`}>{isSW ? "SW" : "HW"}</span>
                     <input type="hidden" {...register(`products.${idx}.itemType` as const)} />
                   </div>
-                  {/* Product name */}
-                  <input
-                    className="input col-span-3"
-                    placeholder="Product name"
-                    {...register(`products.${idx}.name` as const)}
-                  />
-                  {/* Brand */}
-                  <input
-                    className="input col-span-1"
-                    placeholder="Brand"
-                    {...register(`products.${idx}.brand` as const)}
-                  />
-                  {/* SKU */}
-                  <input
-                    className="input col-span-2"
-                    placeholder="SKU"
-                    {...register(`products.${idx}.sku` as const)}
-                  />
-                  {/* Qty */}
-                  <input
-                    className="input col-span-1"
-                    type="number"
-                    placeholder="Qty"
-                    {...register(`products.${idx}.qty` as const, {
-                      valueAsNumber: true,
-                    })}
-                  />
-                  {/* Weight */}
+                  <input className="input col-span-3" placeholder="Product name" {...register(`products.${idx}.name` as const)} />
+                  <input className="input col-span-1" placeholder="Brand" {...register(`products.${idx}.brand` as const)} />
+                  <input className="input col-span-2" placeholder="SKU" {...register(`products.${idx}.sku` as const)} />
+                  <input className="input col-span-1" type="number" placeholder="Qty" {...register(`products.${idx}.qty` as const, { valueAsNumber: true })} />
                   <input
                     className={`input col-span-1 ${isSW ? "bg-neutral-100 dark:bg-neutral-800" : ""}`}
-                    type="number"
-                    placeholder={isSW ? "—" : "Weight"}
-                    disabled={isSW}
-                    {...register(`products.${idx}.weight_g` as const, {
-                      valueAsNumber: true,
-                    })}
+                    type="number" placeholder={isSW ? "—" : "Weight"} disabled={isSW}
+                    {...register(`products.${idx}.weight_g` as const, { valueAsNumber: true })}
                   />
-                  {/* Dimensions display */}
                   <div className="col-span-2 text-xs">
                     {isSW ? (
                       <span className="opacity-40 italic">No shipping</span>
@@ -459,58 +364,74 @@ export default function QuoteNew() {
                       </span>
                     )}
                   </div>
-                  {/* Remove */}
-                  <button
-                    type="button"
-                    className="btn col-span-1 text-xs"
-                    onClick={() => remove(idx)}
-                  >
-                    Remove
-                  </button>
+                  <button type="button" className="btn col-span-1 text-xs" onClick={() => remove(idx)}>Remove</button>
                 </div>
               );
             })}
           </div>
-          
         </div>
 
-       
-
-        {/* Submit */}
+        {/* Rate Buttons */}
         <div className="flex gap-3">
-          <button type="submit" className="btn">
-            Get Rates
+          <button
+            type="button"
+            className="btn"
+            onClick={onGetPublicRates}
+            disabled={loadingRates !== ""}
+          >
+            {loadingRates === "public" ? "Loading..." : "Get Rates"}
+          </button>
+          <button
+            type="button"
+            className="px-4 py-2 rounded font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+            onClick={onGetSpecialRates}
+            disabled={loadingRates !== ""}
+          >
+            {loadingRates === "special" ? "Loading..." : "Get Special Rates"}
           </button>
         </div>
 
-        {Object.keys(errors).length > 0 && (
-          <pre className="text-xs text-red-600">
-            {JSON.stringify(errors, null, 2)}
-          </pre>
+        {ratesMessage && (
+          <div className="text-sm text-amber-600">{ratesMessage}</div>
         )}
-      </form>
 
-      {/* Results */}
-      {rates && (
-        <div className="grid gap-3">
-          <h2 className="font-medium">Results</h2>
-          {rates.map((r, i) => (
-            <div key={i} className="rounded border p-3">
-              <div className="flex items-center justify-between">
-                <div className="font-semibold">
-                  {r.carrier} – {r.service}
+        {/* Public Rates Results */}
+        {rates && rates.length > 0 && (
+          <div className="grid gap-3">
+            <h2 className="font-medium">Public Rates</h2>
+            {rates.map((r, i) => (
+              <div key={i} className="rounded border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">{r.carrier} – {r.service}</div>
+                  <div className="text-lg font-bold">${r.total} {r.currency}</div>
                 </div>
-                <div className="text-lg">
-                  {r.total} {r.currency}
+                <div className="text-sm opacity-80">
+                  Transit: {r.transitDays} days · Weight: {(r as any).totalWeightKg} kg · ${(r as any).pricePerKg}/kg
                 </div>
               </div>
-              <div className="text-sm opacity-80">
-                Transit: {r.transitDays} days
+            ))}
+          </div>
+        )}
+
+        {/* Special Rates Results */}
+        {specialRates && specialRates.length > 0 && (
+          <div className="grid gap-3">
+            <h2 className="font-medium text-purple-700">Special Rates (Freight Forwarder)</h2>
+            {specialRates.map((r, i) => (
+              <div key={i} className="rounded border border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">{r.carrier} – {r.service}</div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">${r.total} {r.currency}</div>
+                </div>
+                <div className="text-sm opacity-80">
+                  Transit: {r.transitDays} days · Weight: {(r as any).totalWeightKg} kg · ${(r as any).pricePerKg}/kg
+                  {(r as any).validFrom && ` · Valid: ${(r as any).validFrom} to ${(r as any).validTo}`}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
