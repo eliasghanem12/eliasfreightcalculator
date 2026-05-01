@@ -101,6 +101,19 @@ const volumetricWeight_g = (l: number, w: number, h: number, mode: string) => {
   return (l_cm * w_cm * h_cm / divisor) * 1000;
 };
 // ─── Get Public Rates from backend ───────────────────────────────
+// ─── Fetch dimensions for a single product ───────────────────────
+export async function fetchSingleDimensions(name: string, sku: string): Promise<ParsedProduct | null> {
+  const text = sku ? `1x ${name} (${sku})` : `1x ${name}`;
+  const res = await fetch(`${API}/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: text, fileType: "text" }),
+  });
+  if (!res.ok) throw new Error(`Dimension fetch failed: ${await res.text()}`);
+  const json = await res.json();
+  const items = json.data?.items ?? [];
+  return items.length > 0 ? items[0] : null;
+}
 export async function getPublicRates(req: {
   items: any[];
   origin: { country: string };
