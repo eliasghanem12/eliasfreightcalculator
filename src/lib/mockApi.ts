@@ -109,7 +109,7 @@ export async function getPublicRates(req: {
   });
   if (!res.ok) throw new Error(`Public rates failed: ${await res.text()}`);
   const json = await res.json();
-  return json.data?.rates ?? [];
+  return json.data?.quotes ?? json.data?.rates ?? [];
 }
 
 // ─── Get Special Rates from backend ──────────────────────────────
@@ -126,7 +126,8 @@ export async function getSpecialRates(req: {
   });
   if (!res.ok) throw new Error(`Special rates failed: ${await res.text()}`);
   const json = await res.json();
-  return json.data ?? { rates: [] };
+  const result = json.data ?? {};
+  return { rates: result.quotes ?? result.rates ?? [], message: result.message };
 }
 
 // ─── Mock helpers (kept for compatibility) ───────────────────────
