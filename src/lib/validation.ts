@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 
 export const productSchema = z.object({
@@ -6,6 +5,7 @@ export const productSchema = z.object({
   brand: z.string().optional(),
   sku: z.string().optional(),
   qty: z.number().int().positive(),
+  itemType: z.enum(["hardware", "software"]).optional(),
   l_mm: z.number().positive().optional(),
   w_mm: z.number().positive().optional(),
   h_mm: z.number().positive().optional(),
