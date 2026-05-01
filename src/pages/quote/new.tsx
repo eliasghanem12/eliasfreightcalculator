@@ -379,9 +379,7 @@ export default function QuoteNew() {
               >
                 Add Row
               </button>
-              <button type="button" className="btn" onClick={onAutoFetch}>
-                Auto-Fetch Dimensions
-              </button>
+             
             </div>
           </div>
 
@@ -473,9 +471,7 @@ export default function QuoteNew() {
               );
             })}
           </div>
-          <p className="text-xs opacity-70">
-            Auto-Fetch only retrieves dimensions for hardware items. Software items are excluded from freight.
-          </p>
+          
         </div>
 
        
