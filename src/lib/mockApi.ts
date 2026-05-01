@@ -100,7 +100,39 @@ const volumetricWeight_g = (l: number, w: number, h: number, mode: string) => {
   const divisor = mode === "air" || mode === "courier" ? 6000 : 10000;
   return (l_cm * w_cm * h_cm / divisor) * 1000;
 };
+// ─── Get Public Rates from backend ───────────────────────────────
+export async function getPublicRates(req: {
+  items: any[];
+  origin: { country: string };
+  destination: { country: string };
+  mode: string;
+}): Promise<Rate[]> {
+  const res = await fetch(`${API}/quotes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...req, rateType: "public" }),
+  });
+  if (!res.ok) throw new Error(`Public rates failed: ${await res.text()}`);
+  const json = await res.json();
+  return json.data?.rates ?? [];
+}
 
+// ─── Get Special Rates from backend ──────────────────────────────
+export async function getSpecialRates(req: {
+  items: any[];
+  origin: { country: string };
+  destination: { country: string };
+  mode: string;
+}): Promise<{ rates: Rate[]; message?: string }> {
+  const res = await fetch(`${API}/quotes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...req, rateType: "special" }),
+  });
+  if (!res.ok) throw new Error(`Special rates failed: ${await res.text()}`);
+  const json = await res.json();
+  return json.data ?? { rates: [] };
+}
 export async function mockQuote(req: QuoteRequest): Promise<Rate[]> {
   const key = JSON.stringify(req);
   const h = Math.abs(hash(key));
