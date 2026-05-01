@@ -285,17 +285,7 @@ export default function QuoteNew() {
               <option>courier</option>
             </select>
           </div>
-          <div>
-            <label className="text-sm font-medium">
-              Declared Value
-            </label>
-            <input
-              className="input"
-              type="number"
-              placeholder="15000"
-              {...register("declaredValue", { valueAsNumber: true })}
-            />
-          </div>
+          
         </div>
 
         {/* Mode-based port pickers */}
