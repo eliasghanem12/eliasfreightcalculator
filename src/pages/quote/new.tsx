@@ -78,18 +78,32 @@ export default function QuoteNew() {
       setUploadState("uploading");
       const parsed = await parseQuoteFile(file);
 
-      // Populate products table with ALL items (hardware + software)
-      const allProducts = parsed.map(p => ({
-        name: p.model ? `${p.name} (${p.model})` : p.name,
-        brand: "",
-        sku: p.model ?? "",
-        qty: p.qty,
-        itemType: p.type as "hardware" | "software",
-        l_mm: undefined as number | undefined,
-        w_mm: undefined as number | undefined,
-        h_mm: undefined as number | undefined,
-        weight_g: (p.type === "hardware" && p.weight > 0) ? Math.round(p.weight * 453.592) : undefined as number | undefined,
-      }));
+    // Populate products table with ALL items (hardware + software)
+      const allProducts = parsed.map(p => {
+        // Parse dimensions string "L x W x H in" into mm values
+        let l_mm: number | undefined;
+        let w_mm: number | undefined;
+        let h_mm: number | undefined;
+        if (p.type === "hardware" && p.dimensions) {
+          const parts = p.dimensions.replace(/in$/i, "").trim().split(/\s*x\s*/i);
+          if (parts.length === 3) {
+            l_mm = Math.round(parseFloat(parts[0]) * 25.4);
+            w_mm = Math.round(parseFloat(parts[1]) * 25.4);
+            h_mm = Math.round(parseFloat(parts[2]) * 25.4);
+          }
+        }
+        return {
+          name: p.model ? `${p.name} (${p.model})` : p.name,
+          brand: "",
+          sku: p.model ?? "",
+          qty: p.qty,
+          itemType: p.type as "hardware" | "software",
+          l_mm,
+          w_mm,
+          h_mm,
+          weight_g: (p.type === "hardware" && p.weight > 0) ? Math.round(p.weight * 453.592) : undefined,
+        };
+      });
 
       if (allProducts.length > 0) {
         setValue("products", allProducts);
