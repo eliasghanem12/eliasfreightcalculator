@@ -3,8 +3,8 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { quoteSchema, type QuoteFormValues } from "../../lib/validation";
 import { useMemo, useState, useRef } from "react";
-import { getPublicRates, getSpecialRates, productsToParcels, parseQuoteFile } from "../../lib/mockApi";
-import type { Rate, QuoteRequest, Parcel, Product } from "../../lib/types";
+import { getPublicRates, getSpecialRates, fetchSingleDimensions, parseQuoteFile } from "../../lib/mockApi";
+import type { Rate } from "../../lib/types";
 import {
   AIRPORTS,
   SEAPORTS,
@@ -22,10 +22,10 @@ export default function QuoteNew() {
   const [specialRates, setSpecialRates] = useState<Rate[] | null>(null);
   const [ratesMessage, setRatesMessage] = useState<string>("");
   const [loadingRates, setLoadingRates] = useState<"" | "public" | "special">("");
+  const [fetchingDimIdx, setFetchingDimIdx] = useState<number | null>(null);
 
   const {
     register,
-    handleSubmit,
     setValue,
     watch,
     control,
@@ -37,11 +37,8 @@ export default function QuoteNew() {
       destination: { country: "RW" },
       incoterm: "CIP",
       mode: "sea",
-      products: [
-        { name: "Dell PowerEdge R760xs", qty: 1, itemType: "hardware" },
-        { name: "Dell ME5024", qty: 1, itemType: "hardware" },
-      ],
-      parcels: [{ l_mm: 1200, w_mm: 800, h_mm: 600, weight_g: 100000 }],
+      products: [],
+      parcels: [{ l_mm: 1, w_mm: 1, h_mm: 1, weight_g: 1 }],
       declaredValue: 15000,
       currency: "USD",
       options: { insurance: true },
@@ -120,7 +117,47 @@ export default function QuoteNew() {
     }
   };
 
-  // Build items payload for quotes endpoint
+  // Fetch dimensions for a single row
+  const onFetchSingleDims = async (idx: number) => {
+    const name = watch(`products.${idx}.name`) || "";
+    const sku = watch(`products.${idx}.sku`) || "";
+    if (!name && !sku) return;
+
+    setFetchingDimIdx(idx);
+    try {
+      const result = await fetchSingleDimensions(name, sku);
+      if (result) {
+        // Set type
+        setValue(`products.${idx}.itemType`, result.type as "hardware" | "software");
+
+        if (result.type === "hardware") {
+          // Parse dimensions
+          if (result.dimensions) {
+            const parts = result.dimensions.replace(/in$/i, "").trim().split(/\s*x\s*/i);
+            if (parts.length === 3) {
+              setValue(`products.${idx}.l_mm`, Math.round(parseFloat(parts[0]) * 25.4));
+              setValue(`products.${idx}.w_mm`, Math.round(parseFloat(parts[1]) * 25.4));
+              setValue(`products.${idx}.h_mm`, Math.round(parseFloat(parts[2]) * 25.4));
+            }
+          }
+          // Set weight
+          if (result.weight > 0) {
+            setValue(`products.${idx}.weight_g`, Math.round(result.weight * 453.592));
+          }
+          // Update name with model if returned
+          if (result.model && !name.includes(result.model)) {
+            setValue(`products.${idx}.name`, `${result.name} (${result.model})`);
+            setValue(`products.${idx}.sku`, result.model);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch dims:", err);
+    } finally {
+      setFetchingDimIdx(null);
+    }
+  };
+
   const buildQuotePayload = () => {
     const products = watch("products") ?? [];
     const items = products
@@ -148,8 +185,7 @@ export default function QuoteNew() {
     setRates(null);
     setRatesMessage("");
     try {
-      const payload = buildQuotePayload();
-      const result = await getPublicRates(payload);
+      const result = await getPublicRates(buildQuotePayload());
       setRates(result);
     } catch (err: any) {
       setRatesMessage(err.message || "Failed to get public rates");
@@ -163,8 +199,7 @@ export default function QuoteNew() {
     setSpecialRates(null);
     setRatesMessage("");
     try {
-      const payload = buildQuotePayload();
-      const result = await getSpecialRates(payload);
+      const result = await getSpecialRates(buildQuotePayload());
       setSpecialRates(result.rates);
       if (result.message) setRatesMessage(result.message);
     } catch (err: any) {
@@ -191,34 +226,20 @@ export default function QuoteNew() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">
-              Origin Country
-              <Help text="Choose the origin country." />
+              Origin Country <Help text="Choose the origin country." />
             </label>
-            <select
-              className="input"
-              value={watch("origin.country")}
-              onChange={(e) => { setValue("origin.country", e.target.value); setValue("origin.portId", ""); }}
-            >
+            <select className="input" value={watch("origin.country")} onChange={(e) => { setValue("origin.country", e.target.value); setValue("origin.portId", ""); }}>
               <option value="">-- Select Country --</option>
-              {allCountries.map(({ code, name }) => (
-                <option key={code} value={code}>{name}</option>
-              ))}
+              {allCountries.map(({ code, name }) => (<option key={code} value={code}>{name}</option>))}
             </select>
           </div>
           <div>
             <label className="text-sm font-medium">
-              Destination Country
-              <Help text="Choose the destination country." />
+              Destination Country <Help text="Choose the destination country." />
             </label>
-            <select
-              className="input"
-              value={watch("destination.country")}
-              onChange={(e) => { setValue("destination.country", e.target.value); setValue("destination.portId", ""); }}
-            >
+            <select className="input" value={watch("destination.country")} onChange={(e) => { setValue("destination.country", e.target.value); setValue("destination.portId", ""); }}>
               <option value="">-- Select Country --</option>
-              {allCountries.map(({ code, name }) => (
-                <option key={code} value={code}>{name}</option>
-              ))}
+              {allCountries.map(({ code, name }) => (<option key={code} value={code}>{name}</option>))}
             </select>
           </div>
         </div>
@@ -226,32 +247,15 @@ export default function QuoteNew() {
         {/* Mode / Incoterm */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-sm font-medium">
-              Incoterm
-              <Help text="Trade term that defines who pays and where risk transfers." />
-            </label>
+            <label className="text-sm font-medium">Incoterm <Help text="Trade term that defines who pays and where risk transfers." /></label>
             <select className="input" value={watch("incoterm")} onChange={(e) => setValue("incoterm", e.target.value as any)}>
-              <option>EXW</option>
-              <option>FOB</option>
-              <option>CIF</option>
-              <option>CIP</option>
-              <option>DDP</option>
+              <option>EXW</option><option>FOB</option><option>CIF</option><option>CIP</option><option>DDP</option>
             </select>
           </div>
           <div>
-            <label className="text-sm font-medium">
-              Mode
-              <Help text="Transport type: Air shows airports; Sea shows seaports; Road/Courier shows warehouses." />
-            </label>
-            <select
-              className="input"
-              value={watch("mode")}
-              onChange={(e) => { setValue("mode", e.target.value as any); setValue("origin.portId", ""); setValue("destination.portId", ""); }}
-            >
-              <option>air</option>
-              <option>sea</option>
-              <option>road</option>
-              <option>courier</option>
+            <label className="text-sm font-medium">Mode <Help text="Transport type." /></label>
+            <select className="input" value={watch("mode")} onChange={(e) => { setValue("mode", e.target.value as any); setValue("origin.portId", ""); setValue("destination.portId", ""); }}>
+              <option>air</option><option>sea</option><option>road</option><option>courier</option>
             </select>
           </div>
         </div>
@@ -264,9 +268,7 @@ export default function QuoteNew() {
             </label>
             <select className="input" value={watch("origin.portId") || ""} onChange={(e) => setValue("origin.portId", e.target.value)}>
               <option value="">-- Select --</option>
-              {originList.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({COUNTRY_NAMES[p.country] ?? p.country})</option>
-              ))}
+              {originList.map((p) => (<option key={p.id} value={p.id}>{p.name} ({COUNTRY_NAMES[p.country] ?? p.country})</option>))}
             </select>
           </div>
           <div>
@@ -275,9 +277,7 @@ export default function QuoteNew() {
             </label>
             <select className="input" value={watch("destination.portId") || ""} onChange={(e) => setValue("destination.portId", e.target.value)}>
               <option value="">-- Select --</option>
-              {destList.map((p) => (
-                <option key={p.id} value={p.id}>{p.name} ({COUNTRY_NAMES[p.country] ?? p.country})</option>
-              ))}
+              {destList.map((p) => (<option key={p.id} value={p.id}>{p.name} ({COUNTRY_NAMES[p.country] ?? p.country})</option>))}
             </select>
           </div>
         </div>
@@ -286,24 +286,11 @@ export default function QuoteNew() {
         <div className="flex items-center justify-between mb-3">
           <div className="text-sm font-medium">Quote Upload</div>
           <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.csv,.xlsx,.xls,.json,.txt,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={onQuoteSelect}
-            />
-            <button
-              type="button"
-              className="btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadState === "signing" || uploadState === "uploading"}
-            >
+            <input ref={fileInputRef} type="file" accept=".pdf,.csv,.xlsx,.xls,.json,.txt,.jpg,.jpeg,.png" className="hidden" onChange={onQuoteSelect} />
+            <button type="button" className="btn" onClick={() => fileInputRef.current?.click()} disabled={uploadState === "uploading"}>
               {uploadState === "uploading" ? "Parsing…" : "Upload Quote"}
             </button>
-            {quoteFileName && (
-              <span className="text-xs opacity-70">Selected: {quoteFileName}</span>
-            )}
+            {quoteFileName && <span className="text-xs opacity-70">Selected: {quoteFileName}</span>}
           </div>
         </div>
         {uploadState === "done" && uploadedQuoteId && (
@@ -317,28 +304,32 @@ export default function QuoteNew() {
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium">Products</label>
-            <button type="button" className="btn" onClick={() => append({ name: "", qty: 1, itemType: "hardware" })}>
-              Add Row
+            <button type="button" className="btn" onClick={() => append({ name: "", qty: 1, sku: "", itemType: "hardware" })}>
+              + Add Product
             </button>
           </div>
 
+          {/* Table header */}
           <div className="grid grid-cols-12 gap-2 text-xs font-medium opacity-70 px-1">
             <div className="col-span-1">Type</div>
             <div className="col-span-3">Product Name</div>
-            <div className="col-span-1">Brand</div>
             <div className="col-span-2">SKU</div>
             <div className="col-span-1">Qty</div>
             <div className="col-span-1">Wt (g)</div>
             <div className="col-span-2">Dims (mm)</div>
-            <div className="col-span-1"></div>
+            <div className="col-span-2"></div>
           </div>
 
           <div className="grid gap-2">
             {productFields.map((f, idx) => {
               const itemType = watch(`products.${idx}.itemType`);
               const isSW = itemType === "software";
+              const hasDims = !!watch(`products.${idx}.l_mm`);
+              const isFetching = fetchingDimIdx === idx;
+
               return (
                 <div key={f.id} className={`grid grid-cols-12 gap-2 items-center ${isSW ? "opacity-60" : ""}`}>
+                  {/* Type badge */}
                   <div className="col-span-1">
                     <span className={`inline-block text-xs font-semibold px-2 py-1 rounded ${
                       isSW ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
@@ -346,56 +337,70 @@ export default function QuoteNew() {
                     }`}>{isSW ? "SW" : "HW"}</span>
                     <input type="hidden" {...register(`products.${idx}.itemType` as const)} />
                   </div>
+                  {/* Product name */}
                   <input className="input col-span-3" placeholder="Product name" {...register(`products.${idx}.name` as const)} />
-                  <input className="input col-span-1" placeholder="Brand" {...register(`products.${idx}.brand` as const)} />
-                  <input className="input col-span-2" placeholder="SKU" {...register(`products.${idx}.sku` as const)} />
+                  {/* SKU */}
+                  <input className="input col-span-2" placeholder="SKU / Part #" {...register(`products.${idx}.sku` as const)} />
+                  {/* Qty */}
                   <input className="input col-span-1" type="number" placeholder="Qty" {...register(`products.${idx}.qty` as const, { valueAsNumber: true })} />
+                  {/* Weight */}
                   <input
                     className={`input col-span-1 ${isSW ? "bg-neutral-100 dark:bg-neutral-800" : ""}`}
-                    type="number" placeholder={isSW ? "—" : "Weight"} disabled={isSW}
+                    type="number" placeholder={isSW ? "—" : "Wt"}
+                    disabled={isSW}
                     {...register(`products.${idx}.weight_g` as const, { valueAsNumber: true })}
                   />
+                  {/* Dimensions */}
                   <div className="col-span-2 text-xs">
                     {isSW ? (
                       <span className="opacity-40 italic">No shipping</span>
-                    ) : (
+                    ) : hasDims ? (
                       <span className="opacity-70">
-                        {watch(`products.${idx}.l_mm`) ? `${watch(`products.${idx}.l_mm`)}×${watch(`products.${idx}.w_mm`)}×${watch(`products.${idx}.h_mm`)}` : "—"}
+                        {watch(`products.${idx}.l_mm`)}×{watch(`products.${idx}.w_mm`)}×{watch(`products.${idx}.h_mm`)}
                       </span>
+                    ) : (
+                      <span className="opacity-40">—</span>
                     )}
                   </div>
-                  <button type="button" className="btn col-span-1 text-xs" onClick={() => remove(idx)}>Remove</button>
+                  {/* Actions */}
+                  <div className="col-span-2 flex gap-1">
+                    {!isSW && !hasDims && (
+                      <button
+                        type="button"
+                        className="px-2 py-1 text-xs rounded font-medium text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+                        onClick={() => onFetchSingleDims(idx)}
+                        disabled={isFetching}
+                      >
+                        {isFetching ? "..." : "Fetch"}
+                      </button>
+                    )}
+                    <button type="button" className="px-2 py-1 text-xs rounded font-medium text-white bg-sky-500 hover:bg-sky-600" onClick={() => remove(idx)}>
+                      Remove
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
+
+          {productFields.length === 0 && (
+            <div className="text-sm text-center opacity-50 py-4">No products yet. Upload a quote or add products manually.</div>
+          )}
         </div>
 
         {/* Rate Buttons */}
         <div className="flex gap-3">
-          <button
-            type="button"
-            className="btn"
-            onClick={onGetPublicRates}
-            disabled={loadingRates !== ""}
-          >
+          <button type="button" className="btn" onClick={onGetPublicRates} disabled={loadingRates !== ""}>
             {loadingRates === "public" ? "Loading..." : "Get Rates"}
           </button>
-          <button
-            type="button"
-            className="px-4 py-2 rounded font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-            onClick={onGetSpecialRates}
-            disabled={loadingRates !== ""}
-          >
+          <button type="button" className="px-4 py-2 rounded font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50" onClick={onGetSpecialRates} disabled={loadingRates !== ""}>
             {loadingRates === "special" ? "Loading..." : "Get Special Rates"}
           </button>
         </div>
 
-        {ratesMessage && (
-          <div className="text-sm text-amber-600">{ratesMessage}</div>
-        )}
+        {ratesMessage && <div className="text-sm text-amber-600">{ratesMessage}</div>}
 
-        {/* Public Rates Results */}
+        {/* Public Rates */}
         {rates && rates.length > 0 && (
           <div className="grid gap-3">
             <h2 className="font-medium">Public Rates</h2>
@@ -413,7 +418,7 @@ export default function QuoteNew() {
           </div>
         )}
 
-        {/* Special Rates Results */}
+        {/* Special Rates */}
         {specialRates && specialRates.length > 0 && (
           <div className="grid gap-3">
             <h2 className="font-medium text-purple-700">Special Rates (Freight Forwarder)</h2>
