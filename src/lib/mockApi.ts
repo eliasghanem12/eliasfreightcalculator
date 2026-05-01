@@ -1,9 +1,20 @@
 import type { QuoteRequest, Rate } from "./types";
 
-// ─── Your FreightIQ backend URL ───────────────────────────────────
 const API = import.meta.env.VITE_API_URL ?? "";
 
-// ─── Parse a quote file using Claude AI ──────────────────────────
+// ─── Parsed product type returned by backend ─────────────────────
+export interface ParsedProduct {
+  id: number;
+  name: string;
+  model: string | null;
+  type: "hardware" | "software";
+  qty: number;
+  unitPrice: number;
+  dimensions: string | null;
+  weight: number;
+}
+
+// ─── Parse a quote file using AI ─────────────────────────────────
 export async function parseQuoteFile(file: File): Promise<ParsedProduct[]> {
   const ext = file.name.split(".").pop()?.toLowerCase();
   const isImage = ["jpg", "jpeg", "png"].includes(ext ?? "");
@@ -11,26 +22,22 @@ export async function parseQuoteFile(file: File): Promise<ParsedProduct[]> {
   const isExcel = ["xlsx", "xls"].includes(ext ?? "");
 
   let body: string;
-  let contentField: "content" | "base64";
 
   if (isImage || isPDF) {
-    // Send as base64
     const base64 = await fileToBase64(file);
     body = JSON.stringify({
       base64,
       mediaType: file.type || (isPDF ? "application/pdf" : "image/png"),
     });
-    contentField = "base64";
   } else if (isExcel) {
-    // Convert Excel to text using SheetJS
-    const text = await excelToText(file);
+    let text = await excelToText(file);
+    if (text.length > 15000) {
+      text = text.slice(0, 15000) + "\n[truncated]";
+    }
     body = JSON.stringify({ content: text });
-    contentField = "content";
   } else {
-    // Plain text / CSV
     const text = await file.text();
     body = JSON.stringify({ content: text });
-    contentField = "content";
   }
 
   const res = await fetch(`${API}/parse`, {
@@ -54,7 +61,7 @@ function fileToBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      resolve(result.split(",")[1]); // strip data:...;base64,
+      resolve(result.split(",")[1]);
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
@@ -63,44 +70,17 @@ function fileToBase64(file: File): Promise<string> {
 
 // ─── Convert Excel to plain text using SheetJS ───────────────────
 async function excelToText(file: File): Promise<string> {
-  // Dynamically import SheetJS (already available via CDN in browser)
   const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs" as any);
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: "array" });
-
-  // Use the "Quote" sheet if it exists, otherwise first sheet
   const sheetName =
     wb.SheetNames.find((n: string) =>
       ["quote", "summary", "sheet1"].includes(n.toLowerCase())
     ) ?? wb.SheetNames[0];
-
   const ws = wb.Sheets[sheetName];
   return XLSX.utils.sheet_to_csv(ws);
 }
 
-// ─── Parsed product type returned by backend ─────────────────────
-export interface ParsedProduct {
-  id: number;
-  name: string;
-  model: string | null;
-  type: "hardware" | "software";
-  qty: number;
-  unitPrice: number;
-  dimensions: string | null;
-  weight: number;
-}
-
-// ─── Everything below stays the same (mock) ──────────────────────
-
-const hash = (s: string) =>
-  [...s].reduce((a, c) => ((a << 5) - a) + c.charCodeAt(0) | 0, 0);
-
-const volumetricWeight_g = (l: number, w: number, h: number, mode: string) => {
-  const l_cm = l / 10, w_cm = w / 10, h_cm = h / 10;
-  const divisor = mode === "air" || mode === "courier" ? 6000 : 10000;
-  return (l_cm * w_cm * h_cm / divisor) * 1000;
-};
-// ─── Get Public Rates from backend ───────────────────────────────
 // ─── Fetch dimensions for a single product ───────────────────────
 export async function fetchSingleDimensions(name: string, sku: string): Promise<ParsedProduct | null> {
   const text = sku ? `1x ${name} (${sku})` : `1x ${name}`;
@@ -114,6 +94,8 @@ export async function fetchSingleDimensions(name: string, sku: string): Promise<
   const items = json.data?.items ?? [];
   return items.length > 0 ? items[0] : null;
 }
+
+// ─── Get Public Rates from backend ───────────────────────────────
 export async function getPublicRates(req: {
   items: any[];
   origin: { country: string };
@@ -146,6 +128,17 @@ export async function getSpecialRates(req: {
   const json = await res.json();
   return json.data ?? { rates: [] };
 }
+
+// ─── Mock helpers (kept for compatibility) ───────────────────────
+const hash = (s: string) =>
+  [...s].reduce((a, c) => (((a << 5) - a) + c.charCodeAt(0)) | 0, 0);
+
+const volumetricWeight_g = (l: number, w: number, h: number, mode: string) => {
+  const l_cm = l / 10, w_cm = w / 10, h_cm = h / 10;
+  const divisor = mode === "air" || mode === "courier" ? 6000 : 10000;
+  return ((l_cm * w_cm * h_cm) / divisor) * 1000;
+};
+
 export async function mockQuote(req: QuoteRequest): Promise<Rate[]> {
   const key = JSON.stringify(req);
   const h = Math.abs(hash(key));
@@ -182,7 +175,7 @@ export async function mockQuote(req: QuoteRequest): Promise<Rate[]> {
 }
 
 export async function mockProductLookupByName(q: { name: string; brand?: string; sku?: string }) {
-  const seed = Math.abs([...q.name].reduce((a, c) => ((a << 5) - a) + c.charCodeAt(0) | 0, 0));
+  const seed = Math.abs([...q.name].reduce((a, c) => (((a << 5) - a) + c.charCodeAt(0)) | 0, 0));
   const dims = { l_mm: 250 + (seed % 150), w_mm: 180 + (seed % 120), h_mm: 20 + (seed % 60) };
   const weight_g = 1200 + (seed % 2000);
   return { ...dims, weight_g, confidence: 0.8, source_url: "https://example.com/specs" };
