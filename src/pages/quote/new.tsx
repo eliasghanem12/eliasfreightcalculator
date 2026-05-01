@@ -35,8 +35,8 @@ export default function QuoteNew() {
       incoterm: "CIP",
       mode: "sea",
       products: [
-        { name: "Dell PowerEdge R760xs", qty: 1 },
-        { name: "Dell ME5024", qty: 1 },
+        { name: "Dell PowerEdge R760xs", qty: 1, itemType: "hardware" },
+        { name: "Dell ME5024", qty: 1, itemType: "hardware" },
       ],
       parcels: [{ l_mm: 1200, w_mm: 800, h_mm: 600, weight_g: 100000 }],
       declaredValue: 15000,
@@ -54,7 +54,6 @@ export default function QuoteNew() {
   const originCountry = watch("origin.country");
   const destCountry = watch("destination.country");
 
-  // Country-filtered lists only (no popular hubs, no fallbacks)
   const originList = useMemo(() => {
     const base = mode === "air" ? AIRPORTS : mode === "sea" ? SEAPORTS : WAREHOUSES;
     return byCountry(base, originCountry);
@@ -65,13 +64,12 @@ export default function QuoteNew() {
     return byCountry(base, destCountry);
   }, [mode, destCountry]);
 
-  // Upload state + handler (S3 presigned → upload)
   const [quoteFileName, setQuoteFileName] = useState<string>("");
   const [uploadState, setUploadState] = useState<"idle"|"signing"|"uploading"|"done"|"error">("idle");
   const [uploadedQuoteId, setUploadedQuoteId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setQuoteFileName(file.name);
@@ -80,22 +78,21 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       setUploadState("uploading");
       const parsed = await parseQuoteFile(file);
 
-      // Populate products table with parsed items
-      const hwProducts = parsed
-        .filter(p => p.type === "hardware")
-        .map(p => ({
-          name: p.model ? `${p.name} (${p.model})` : p.name,
-          brand: "",
-          sku: p.model ?? "",
-          qty: p.qty,
-          l_mm: undefined,
-          w_mm: undefined,
-          h_mm: undefined,
-          weight_g: p.weight > 0 ? Math.round(p.weight * 453.592) : undefined,
-        }));
+      // Populate products table with ALL items (hardware + software)
+      const allProducts = parsed.map(p => ({
+        name: p.model ? `${p.name} (${p.model})` : p.name,
+        brand: "",
+        sku: p.model ?? "",
+        qty: p.qty,
+        itemType: p.type as "hardware" | "software",
+        l_mm: undefined as number | undefined,
+        w_mm: undefined as number | undefined,
+        h_mm: undefined as number | undefined,
+        weight_g: (p.type === "hardware" && p.weight > 0) ? Math.round(p.weight * 453.592) : undefined as number | undefined,
+      }));
 
-      if (hwProducts.length > 0) {
-        setValue("products", hwProducts);
+      if (allProducts.length > 0) {
+        setValue("products", allProducts);
       }
 
       setUploadState("done");
@@ -113,6 +110,8 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     for (let i = 0; i < products.length; i++) {
       const p = products[i];
       if (!p?.name) continue;
+      // Only fetch dimensions for hardware items
+      if (p.itemType === "software") continue;
       const found = await mockProductLookupByName({
         name: p.name,
         brand: p.brand,
@@ -122,8 +121,10 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     }
     setValue("products", products);
 
+    // Only convert hardware items to parcels
+    const hwProducts = products.filter(p => p.itemType !== "software");
     const parcels = productsToParcels(
-      products.map((p) => ({
+      hwProducts.map((p) => ({
         l_mm: p.l_mm,
         w_mm: p.w_mm,
         h_mm: p.h_mm,
@@ -135,7 +136,6 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
   };
 
   const onSubmit = async (data: QuoteFormValues) => {
-    // Coerce parcels -> Parcel[]
     const parcels: Parcel[] = (data.parcels ?? [])
       .map(p => ({
         l_mm: p.l_mm!,
@@ -149,7 +149,6 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         )
       );
 
-    // Coerce products -> Product[]
     const products: Product[] = (data.products ?? [])
       .filter(p => p?.name && typeof p.qty === "number" && p.qty! > 0)
       .map(p => ({
@@ -182,7 +181,6 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     localStorage.setItem("lastQuote", JSON.stringify({ req, res }));
   };
 
-  // Build a globally sorted country list from COUNTRY_NAMES
   const allCountries = useMemo(
     () =>
       Object.entries(COUNTRY_NAMES)
@@ -346,7 +344,7 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
               {uploadState === "signing"
                 ? "Preparing…"
                 : uploadState === "uploading"
-                ? "Uploading…"
+                ? "Parsing…"
                 : "Upload Quote"}
             </button>
             {quoteFileName && (
@@ -356,7 +354,7 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
         {uploadState === "done" && uploadedQuoteId && (
           <div className="text-xs text-green-700">
-            Uploaded ✅ Quote ID: <code>{uploadedQuoteId}</code>
+            Uploaded ✅ {uploadedQuoteId}
           </div>
         )}
         {uploadState === "error" && (
@@ -373,60 +371,113 @@ const onQuoteSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
               <button
                 type="button"
                 className="btn"
-                onClick={() => append({ name: "", qty: 1 })}
+                onClick={() => append({ name: "", qty: 1, itemType: "hardware" })}
               >
                 Add Row
               </button>
               <button type="button" className="btn" onClick={onAutoFetch}>
-                Auto-Fetch
+                Auto-Fetch Dimensions
               </button>
             </div>
           </div>
+
+          {/* Table header */}
+          <div className="grid grid-cols-12 gap-2 text-xs font-medium opacity-70 px-1">
+            <div className="col-span-1">Type</div>
+            <div className="col-span-3">Product Name</div>
+            <div className="col-span-1">Brand</div>
+            <div className="col-span-2">SKU</div>
+            <div className="col-span-1">Qty</div>
+            <div className="col-span-1">Wt (g)</div>
+            <div className="col-span-2">Dims (mm)</div>
+            <div className="col-span-1"></div>
+          </div>
+
           <div className="grid gap-2">
-            {productFields.map((f, idx) => (
-              <div key={f.id} className="grid grid-cols-8 gap-2">
-                <input
-                  className="input col-span-3"
-                  placeholder="Product name"
-                  {...register(`products.${idx}.name` as const)}
-                />
-                <input
-                  className="input"
-                  placeholder="Brand (opt)"
-                  {...register(`products.${idx}.brand` as const)}
-                />
-                <input
-                  className="input"
-                  placeholder="SKU (opt)"
-                  {...register(`products.${idx}.sku` as const)}
-                />
-                <input
-                  className="input"
-                  type="number"
-                  placeholder="Qty"
-                  {...register(`products.${idx}.qty` as const, {
-                    valueAsNumber: true,
-                  })}
-                />
-                <button
-                  type="button"
-                  className="btn col-span-1"
-                  onClick={() => remove(idx)}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+            {productFields.map((f, idx) => {
+              const itemType = watch(`products.${idx}.itemType`);
+              const isSW = itemType === "software";
+              return (
+                <div key={f.id} className={`grid grid-cols-12 gap-2 items-center ${isSW ? "opacity-60" : ""}`}>
+                  {/* Type badge */}
+                  <div className="col-span-1">
+                    <span className={`inline-block text-xs font-semibold px-2 py-1 rounded ${
+                      isSW
+                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                        : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                    }`}>
+                      {isSW ? "SW" : "HW"}
+                    </span>
+                    <input type="hidden" {...register(`products.${idx}.itemType` as const)} />
+                  </div>
+                  {/* Product name */}
+                  <input
+                    className="input col-span-3"
+                    placeholder="Product name"
+                    {...register(`products.${idx}.name` as const)}
+                  />
+                  {/* Brand */}
+                  <input
+                    className="input col-span-1"
+                    placeholder="Brand"
+                    {...register(`products.${idx}.brand` as const)}
+                  />
+                  {/* SKU */}
+                  <input
+                    className="input col-span-2"
+                    placeholder="SKU"
+                    {...register(`products.${idx}.sku` as const)}
+                  />
+                  {/* Qty */}
+                  <input
+                    className="input col-span-1"
+                    type="number"
+                    placeholder="Qty"
+                    {...register(`products.${idx}.qty` as const, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                  {/* Weight */}
+                  <input
+                    className={`input col-span-1 ${isSW ? "bg-neutral-100 dark:bg-neutral-800" : ""}`}
+                    type="number"
+                    placeholder={isSW ? "—" : "Weight"}
+                    disabled={isSW}
+                    {...register(`products.${idx}.weight_g` as const, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                  {/* Dimensions display */}
+                  <div className="col-span-2 text-xs">
+                    {isSW ? (
+                      <span className="opacity-40 italic">No shipping</span>
+                    ) : (
+                      <span className="opacity-70">
+                        {watch(`products.${idx}.l_mm`) ? `${watch(`products.${idx}.l_mm`)}×${watch(`products.${idx}.w_mm`)}×${watch(`products.${idx}.h_mm`)}` : "—"}
+                      </span>
+                    )}
+                  </div>
+                  {/* Remove */}
+                  <button
+                    type="button"
+                    className="btn col-span-1 text-xs"
+                    onClick={() => remove(idx)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <p className="text-xs opacity-70">
-            After Auto-Fetch, the system converts products to parcels (1 per unit) for the quote.
+            Auto-Fetch only retrieves dimensions for hardware items. Software items are excluded from freight.
           </p>
         </div>
 
         {/* Parcels quick view */}
         <div>
           <label className="text-sm font-medium">
-            Parcels (computed)
+            Parcels (computed from hardware only)
           </label>
           <pre className="text-xs p-3 rounded border bg-white dark:bg-neutral-800 overflow-auto">
             {JSON.stringify(watch("parcels"), null, 2)}
