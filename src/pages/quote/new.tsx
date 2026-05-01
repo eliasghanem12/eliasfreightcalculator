@@ -474,15 +474,7 @@ export default function QuoteNew() {
           </p>
         </div>
 
-        {/* Parcels quick view */}
-        <div>
-          <label className="text-sm font-medium">
-            Parcels (computed from hardware only)
-          </label>
-          <pre className="text-xs p-3 rounded border bg-white dark:bg-neutral-800 overflow-auto">
-            {JSON.stringify(watch("parcels"), null, 2)}
-          </pre>
-        </div>
+       
 
         {/* Submit */}
         <div className="flex gap-3">
