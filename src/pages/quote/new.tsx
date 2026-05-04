@@ -400,18 +400,19 @@ export default function QuoteNew() {
 
         {ratesMessage && <div className="text-sm text-amber-600">{ratesMessage}</div>}
 
-        {/* Public Rates */}
+{/* Public Rates */}
         {rates && rates.length > 0 && (
           <div className="grid gap-3">
             <h2 className="font-medium">Public Rates</h2>
-            {rates.map((r, i) => (
+            {rates.map((r: any, i) => (
               <div key={i} className="rounded border p-3">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold">{r.carrier} – {r.service}</div>
-                  <div className="text-lg font-bold">${r.total} {r.currency}</div>
+                  <div className="text-lg font-bold">${r.price ?? r.total} {r.currency}</div>
                 </div>
                 <div className="text-sm opacity-80">
-                  Transit: {r.transitDays} days · Weight: {(r as any).totalWeightKg} kg · ${(r as any).pricePerKg}/kg
+                  Transit: {r.transit ?? `${r.transitDays} days`}
+                  {r.recommended && <span className="ml-2 text-green-600 font-medium">★ Recommended</span>}
                 </div>
               </div>
             ))}
@@ -422,15 +423,15 @@ export default function QuoteNew() {
         {specialRates && specialRates.length > 0 && (
           <div className="grid gap-3">
             <h2 className="font-medium text-purple-700">Special Rates (Freight Forwarder)</h2>
-            {specialRates.map((r, i) => (
+            {specialRates.map((r: any, i) => (
               <div key={i} className="rounded border border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800 p-3">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold">{r.carrier} – {r.service}</div>
-                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">${r.total} {r.currency}</div>
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">${r.price ?? r.total} {r.currency}</div>
                 </div>
                 <div className="text-sm opacity-80">
-                  Transit: {r.transitDays} days · Weight: {(r as any).totalWeightKg} kg · ${(r as any).pricePerKg}/kg
-                  {(r as any).validFrom && ` · Valid: ${(r as any).validFrom} to ${(r as any).validTo}`}
+                  Transit: {r.transit ?? `${r.transitDays} days`}
+                  {r.validFrom && ` · Valid: ${r.validFrom} to ${r.validTo}`}
                 </div>
               </div>
             ))}
