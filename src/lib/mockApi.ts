@@ -31,9 +31,27 @@ export async function parseQuoteFile(file: File): Promise<ParsedProduct[]> {
     });
   } else if (isExcel) {
     let text = await excelToText(file);
-    if (text.length > 15000) {
-      text = text.slice(0, 15000) + "\n[truncated]";
+    
+    // Cut off at "TERMS AND CONDITIONS" or similar legal sections
+    const legalMarkers = [
+      /TERMS\s+AND\s+CONDITIONS/i,
+      /Lenovo Agreement for Machines/i,
+      /1\.\s*Definitions/i,
+      /LIMITATION OF LIABILITY/i,
+    ];
+    for (const marker of legalMarkers) {
+      const match = text.search(marker);
+      if (match > 0) {
+        text = text.slice(0, match);
+        break;
+      }
     }
+    
+    // Then cap at 25000 chars as a final safety
+    if (text.length > 25000) {
+      text = text.slice(0, 25000) + "\n[truncated]";
+    }
+    
     body = JSON.stringify({ content: text });
   } else {
     const text = await file.text();
