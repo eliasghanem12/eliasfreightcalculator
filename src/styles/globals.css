@@ -148,3 +148,11 @@ table.products, table.history { width: 100%; border-collapse: collapse; font-siz
 /* column sizing */
 .products td:nth-child(2) input.cell { min-width: 280px; }
 .products td:nth-child(3) input.cell { min-width: 140px; max-width: 170px; }
+
+/* auth */
+.nav-signout { font: inherit; font-size: 14px; color: var(--ink-soft); background: none; border: 0; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.nav-signout:hover { background: var(--paper); color: var(--ink); }
+.auth-wrap [data-amplify-authenticator] { --amplify-colors-brand-primary-80: var(--navy); --amplify-colors-brand-primary-90: var(--navy-ink); --amplify-colors-brand-primary-100: var(--navy-ink); --amplify-components-button-primary-background-color: var(--navy); --amplify-components-button-primary-hover-background-color: var(--navy-ink); --amplify-components-authenticator-router-border-color: var(--line); --amplify-components-authenticator-router-box-shadow: none; --amplify-fonts-default-variable: "IBM Plex Sans", system-ui, sans-serif; --amplify-fonts-default-static: "IBM Plex Sans", system-ui, sans-serif; }
+.auth-wrap [data-amplify-authenticator][data-variation="default"] { min-height: 100vh; background: var(--paper); }
+.auth-head { display: flex; align-items: center; gap: 10px; padding: 28px 32px 8px; font-weight: 600; font-size: 20px; color: var(--navy-ink); }
+.auth-head small { font-weight: 400; color: var(--ink-faint); font-size: 13px; margin-left: 4px; }

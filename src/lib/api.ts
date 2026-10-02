@@ -1,5 +1,11 @@
 // src/lib/api.ts — the only place the frontend talks to the FreightIQ backend.
+import { getIdToken } from "./auth";
 const API = import.meta.env.VITE_API_URL ?? "";
+
+async function authHeaders(extra: Record<string, string> = {}): Promise<Record<string, string>> {
+  const token = await getIdToken();
+  return token ? { ...extra, Authorization: token } : extra;
+}
 
 export type ItemType = "hardware" | "software";
 
@@ -59,9 +65,10 @@ export interface QuoteRequestPayload {
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
+  if (res.status === 401) throw new Error("Your session has expired. Sign in again.");
   const text = await res.text();
   let json: any = null;
   try { json = JSON.parse(text); } catch { /* non-JSON error body */ }
@@ -178,7 +185,7 @@ export interface Place { id: string; name: string; country: string; city?: strin
 export interface LocationsDoc { version?: number; updatedAt?: string; countries: Country[]; airports: Place[]; seaports: Place[]; warehouses: Place[] }
 
 export async function getLocations(): Promise<LocationsDoc> {
-  const res = await fetch(`${API}/locations`);
+  const res = await fetch(`${API}/locations`, { headers: await authHeaders() });
   if (!res.ok) throw new Error(`Locations unavailable (HTTP ${res.status})`);
   const json = await res.json();
   return (json?.data ?? json) as LocationsDoc;
@@ -187,7 +194,7 @@ export async function getLocations(): Promise<LocationsDoc> {
 export async function saveLocations(doc: LocationsDoc, adminKey: string): Promise<LocationsDoc> {
   const res = await fetch(`${API}/locations`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", "X-Admin-Key": adminKey },
+    headers: await authHeaders({ "Content-Type": "application/json", "X-Admin-Key": adminKey }),
     body: JSON.stringify(doc),
   });
   const json = await res.json().catch(() => null);
