@@ -171,3 +171,26 @@ export function transitDaysOf(transit: string): number {
   const m = transit.match(/(\d+)/);
   return m ? parseInt(m[1], 10) : 999;
 }
+
+// ─── Locations (countries, airports, seaports, warehouses) ───────
+export interface Country { code: string; name: string }
+export interface Place { id: string; name: string; country: string; city?: string; type?: "airport" | "seaport" | "warehouse" }
+export interface LocationsDoc { version?: number; updatedAt?: string; countries: Country[]; airports: Place[]; seaports: Place[]; warehouses: Place[] }
+
+export async function getLocations(): Promise<LocationsDoc> {
+  const res = await fetch(`${API}/locations`);
+  if (!res.ok) throw new Error(`Locations unavailable (HTTP ${res.status})`);
+  const json = await res.json();
+  return (json?.data ?? json) as LocationsDoc;
+}
+
+export async function saveLocations(doc: LocationsDoc, adminKey: string): Promise<LocationsDoc> {
+  const res = await fetch(`${API}/locations`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Admin-Key": adminKey },
+    body: JSON.stringify(doc),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || json?.success === false) throw new Error(json?.error || `Save failed (HTTP ${res.status})`);
+  return (json?.data ?? json) as LocationsDoc;
+}

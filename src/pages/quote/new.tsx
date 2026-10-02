@@ -7,7 +7,7 @@ import {
   inchesToMm, lbsToGrams, type Rate, type RatesResponse, type QuoteRequestPayload,
 } from "../../lib/api";
 import { saveQuote } from "../../lib/history";
-import { AIRPORTS, SEAPORTS, WAREHOUSES, byCountry, COUNTRY_NAMES } from "../../lib/locations";
+import { useLocations, countryName } from "../../lib/useLocations";
 import { Stage, Spinner, TypeBadge, Notice, RateColumn } from "../../components/ui";
 
 const INCOTERMS = ["EXW", "FOB", "CIF", "CIP", "DDP"] as const;
@@ -26,10 +26,11 @@ export default function QuoteNew() {
   const destCountry = watch("destination.country");
   const products = watch("products") ?? [];
 
-  const portList = (c: string) => byCountry(mode === "air" ? AIRPORTS : mode === "sea" ? SEAPORTS : WAREHOUSES, c);
-  const originPorts = useMemo(() => portList(originCountry), [mode, originCountry]);
-  const destPorts = useMemo(() => portList(destCountry), [mode, destCountry]);
-  const countries = useMemo(() => Object.entries(COUNTRY_NAMES).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name)), []);
+  const { doc: loc } = useLocations();
+  const portList = (c: string) => (mode === "air" ? loc.airports : mode === "sea" ? loc.seaports : loc.warehouses).filter((p) => p.country === c);
+  const originPorts = useMemo(() => portList(originCountry), [mode, originCountry, loc]);
+  const destPorts = useMemo(() => portList(destCountry), [mode, destCountry, loc]);
+  const countries = useMemo(() => [...loc.countries].sort((a, b) => a.name.localeCompare(b.name)), [loc]);
   const portLabel = mode === "air" ? "airport" : mode === "sea" ? "seaport" : "warehouse or city";
 
   // ── Upload ──────────────────────────────────────────────────────
@@ -275,7 +276,7 @@ export default function QuoteNew() {
       </Stage>
 
       {/* ── 3. Rates ────────────────────────────────────────────── */}
-      <Stage n={3} title="Rates" hint={`${COUNTRY_NAMES[originCountry] ?? originCountry} → ${COUNTRY_NAMES[destCountry] ?? destCountry}, ${mode}, ${incoterm}. Chargeable weight ${num.format(totals.chargeableKg)} kg.`}>
+      <Stage n={3} title="Rates" hint={`${countryName(loc, originCountry)} → ${countryName(loc, destCountry)}, ${mode}, ${incoterm}. Chargeable weight ${num.format(totals.chargeableKg)} kg.`}>
         {rateErr && <Notice kind="error">{rateErr}</Notice>}
         <div className="rates-grid">
           <RateColumn
