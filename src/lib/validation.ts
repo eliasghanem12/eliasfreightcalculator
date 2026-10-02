@@ -1,37 +1,24 @@
 import { z } from "zod";
 
 export const productSchema = z.object({
-  name: z.string().min(2, "Enter product name"),
-  brand: z.string().optional(),
+  name: z.string().default(""),
   sku: z.string().optional(),
-  qty: z.number().int().positive(),
-  itemType: z.enum(["hardware", "software"]).optional(),
+  qty: z.number().int().positive().default(1),
+  itemType: z.enum(["hardware", "software"]).default("hardware"),
   l_mm: z.number().positive().optional(),
   w_mm: z.number().positive().optional(),
   h_mm: z.number().positive().optional(),
-  weight_g: z.number().positive().optional(),
-  confidence: z.number().min(0).max(1).optional(),
-  source_url: z.string().url().optional()
-});
-
-export const parcelSchema = z.object({
-  l_mm: z.number().positive(),
-  w_mm: z.number().positive(),
-  h_mm: z.number().positive(),
-  weight_g: z.number().positive(),
+  weight_g: z.number().nonnegative().optional(),
+  dimSource: z.string().optional(),
 });
 
 export const quoteSchema = z.object({
   origin: z.object({ country: z.string().length(2), portId: z.string().optional() }),
   destination: z.object({ country: z.string().length(2), portId: z.string().optional() }),
-  incoterm: z.enum(["EXW","FOB","CIF","CIP","DDP"]),
-  mode: z.enum(["air","sea","road","courier"]),
-  products: z.array(productSchema).optional(),
-  parcels: z.array(parcelSchema).min(1),
-  declaredValue: z.number().nonnegative(),
-  currency: z.string().min(3),
-  options: z.object({
-    insurance:z.boolean().optional(), coo:z.boolean().optional(), coc:z.boolean().optional()
-  }).optional()
+  incoterm: z.enum(["EXW", "FOB", "CIF", "CIP", "DDP"]),
+  mode: z.enum(["air", "sea", "road", "courier"]),
+  products: z.array(productSchema).default([]),
 });
+
 export type QuoteFormValues = z.infer<typeof quoteSchema>;
+export type ProductRow = z.infer<typeof productSchema>;

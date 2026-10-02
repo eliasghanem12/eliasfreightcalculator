@@ -1,21 +1,28 @@
+import { Outlet, NavLink } from "react-router-dom";
 
-import { Outlet, Link } from "react-router-dom";
+function Mark() {
+  // FreightIQ mark: a box with a route line through it.
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+      <rect x="2" y="6" width="24" height="18" rx="3" fill="#164C82" />
+      <path d="M6 18 L12 12 L17 16 L23 10" fill="none" stroke="#ACCB32" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-50">
-      <header className="border-b px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded bg-brand" />
-          <span className="font-semibold">Freight Calculator</span>
-        </div>
-        <nav className="flex gap-4 text-sm">
-          <Link to="/quote/new">New Quote</Link>
-          <Link to="/quotes">History</Link>
-          <Link to="/admin">Admin</Link>
+    <div className="app">
+      <header className="topbar">
+        <NavLink to="/quote/new" className="brand"><Mark /><span>FreightIQ</span><small>by Mindware</small></NavLink>
+        <nav>
+          <NavLink to="/quote/new">New quote</NavLink>
+          <NavLink to="/quotes">History</NavLink>
+          <NavLink to="/admin">Settings</NavLink>
         </nav>
       </header>
-      <main className="p-4 max-w-6xl mx-auto"><Outlet /></main>
+      <main><Outlet /></main>
+      <footer className="foot">Built on AWS · Amazon Bedrock, Lambda, S3, Amplify</footer>
     </div>
   );
 }
