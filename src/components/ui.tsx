@@ -80,7 +80,7 @@ export function RateColumn({ title, tone, rates, loading, message, emptyText, on
                 <span>Transit {r.transit}</span>
                 {r.pricePerKg != null && <span>{money.format(r.pricePerKg)}/kg</span>}
                 {r.validTo && <span>Valid to {r.validTo}</span>}
-                {r.source === "simulated" && <span className="muted">estimate</span>}
+                {r.source === "simulated" && <span className="muted">fallback estimate</span>}{(r as any).incotermNote && <span className="muted" title={(r as any).incotermNote}>{(r as any).incoterm}</span>}
                 {i === cheapest && isFinite(r.price) && r.price > 0 && <span className="tag tag-best">Lowest price</span>}
                 {i === fastest && <span className="tag tag-fast">Fastest</span>}
               </div>

@@ -1,5 +1,5 @@
 // src/pages/quote/new.tsx — Route → Products → Rates, in that order.
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import type { QuoteFormValues, ProductRow } from "../../lib/validation";
 import {
@@ -139,6 +139,15 @@ export default function QuoteNew() {
   };
 
   const addRow = () => append({ name: "", sku: "", qty: 1, itemType: "hardware" } as ProductRow);
+
+  // Incoterm or mode changed after rates were fetched: refresh them so prices follow the selection.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    if (pub) fetchRates("public");
+    if (spc) fetchRates("special");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incoterm, mode]);
 
   return (
     <div className="page">
@@ -280,9 +289,9 @@ export default function QuoteNew() {
         {rateErr && <Notice kind="error">{rateErr}</Notice>}
         <div className="rates-grid">
           <RateColumn
-            title="Carrier rates" tone="public" buttonLabel="Get carrier rates"
+            title="Market estimate" tone="public" buttonLabel="Get market rates"
             rates={pub?.rates ?? null} loading={loading === "public"} message={pub?.message}
-            emptyText="Public rates from DHL, FedEx, UPS and Aramex for this lane."
+            emptyText="AI-researched market prices for this lane. Indicative only, refreshed daily. Not a bookable quote."
             onFetch={() => fetchRates("public")} />
           <RateColumn
             title="Your negotiated rates" tone="special" buttonLabel="Get negotiated rates"
