@@ -217,3 +217,35 @@ export async function saveLocations(doc: LocationsDoc, adminKey: string): Promis
   if (!res.ok || json?.success === false) throw new Error(json?.error || `Save failed (HTTP ${res.status})`);
   return (json?.data ?? json) as LocationsDoc;
 }
+
+// ─── Usage events, feedback, admin stats ─────────────────────────
+export interface QuoteEventPayload {
+  quoteId: string; origin: string; destination: string; mode: string; incoterm: string;
+  fileType?: string; fileName?: string; engine?: string; packaging?: string;
+  hwLines: number; swLines: number; units: number; weightKg: number; volumeM3: number; chargeableKg: number;
+  trust: { verified: number; checked: number; estimated: number };
+  cheapestIndicative?: number | null; cheapestNegotiated?: number | null; parseMs?: number | null;
+}
+export async function logQuoteEvent(p: QuoteEventPayload): Promise<void> {
+  try { await post("/events", p); } catch (e) { console.warn("event not logged", e); }
+}
+export async function sendFeedback(p: { quoteId?: string; thumbs: "up" | "down"; category: string; comment?: string; origin?: string; destination?: string; mode?: string }): Promise<void> {
+  await post("/feedback", p);
+}
+export interface AdminStats {
+  days: number; since: string;
+  kpis: { quotes: number; users: number; feedback: number; satisfaction: number | null; verifiedRate: number | null; avgWeightKg: number; hwLines: number; swLines: number; withNegotiated: number };
+  series: { day: string; quotes: number; up: number; down: number }[];
+  byMode: { key: string; count: number }[]; byLane: { key: string; count: number }[]; byUser: { key: string; count: number }[];
+  byIncoterm: { key: string; count: number }[]; byFile: { key: string; count: number }[]; engines: { key: string; count: number }[];
+  trust: { verified: number; checked: number; estimated: number };
+  feedbackByCategory: { category: string; up: number; down: number }[];
+  recentFeedback: { ts: string; user: string; thumbs: string; category: string; comment: string; lane: string; mode: string; quoteId: string }[];
+  recentQuotes: { ts: string; user: string; lane: string; mode: string; incoterm: string; fileType: string; hwLines: number; swLines: number; weightKg: number; volumeM3: number; trust: { verified: number; checked: number; estimated: number }; cheapestIndicative: number | null; cheapestNegotiated: number | null; engine: string; quoteId: string }[];
+}
+export async function getAdminStats(days = 30): Promise<AdminStats> {
+  const res = await fetch(`${API}/admin/stats?days=${days}`, { headers: await authHeaders() });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || json?.success === false) throw new Error(json?.error || `HTTP ${res.status}`);
+  return (json?.data ?? json) as AdminStats;
+}

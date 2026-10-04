@@ -8,6 +8,7 @@ import QuoteNew from "./pages/quote/new";
 import QuoteView from "./pages/quote/view";
 import QuotesIndex from "./pages/quotes/index";
 import Admin from "./pages/admin/index";
+import Dashboard from "./pages/dashboard";
 
 const router = createBrowserRouter([
   { path: "/", element: <App />, children: [
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
     { path: "quote/:id", element: <QuoteView /> },
     { path: "quotes", element: <QuotesIndex /> },
     { path: "admin", element: <Admin /> },
+    { path: "dashboard", element: <Dashboard /> },
   ] },
 ]);
 

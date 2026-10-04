@@ -1,7 +1,8 @@
 import { Outlet, NavLink } from "react-router-dom";
 import { Authenticator, useAuthenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
-import { authEnabled, signOut } from "./lib/auth";
+import { useEffect, useState } from "react";
+import { authEnabled, signOut, getGroups } from "./lib/auth";
 
 function Mark() {
   return (
@@ -13,6 +14,8 @@ function Mark() {
 }
 
 function Shell({ email }: { email?: string }) {
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => { getGroups().then((g) => setAdmin(g.includes("admin"))); }, [email]);
   return (
     <div className="app">
       <header className="topbar">
@@ -21,6 +24,7 @@ function Shell({ email }: { email?: string }) {
           <NavLink to="/quote/new">New quote</NavLink>
           <NavLink to="/quotes">History</NavLink>
           <NavLink to="/admin">Settings</NavLink>
+          {admin && <NavLink to="/dashboard">Dashboard</NavLink>}
           {authEnabled && (
             <button type="button" className="nav-signout" onClick={() => signOut()} title={email}>
               Sign out{email ? ` (${email})` : ""}

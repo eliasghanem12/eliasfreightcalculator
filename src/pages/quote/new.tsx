@@ -7,6 +7,8 @@ import {
   inchesToMm, lbsToGrams, type Rate, type RatesResponse, type QuoteRequestPayload,
 } from "../../lib/api";
 import { saveQuote } from "../../lib/history";
+import { logQuoteEvent, sendFeedback } from "../../lib/api";
+import { FeedbackBox } from "../../components/feedback";
 import { palletise, type PackagingMode } from "../../lib/packaging";
 import { useLocations, countryName } from "../../lib/useLocations";
 import { Stage, Spinner, TypeBadge, Notice, RateColumn, TrustBadge } from "../../components/ui";
@@ -18,6 +20,10 @@ const num = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 export default function QuoteNew() {
   const [packaging, setPackaging] = useState<PackagingMode>("loose");
   const [declared, setDeclared] = useState<string>("");
+  const [quoteId, setQuoteId] = useState<string>(() => "q" + Date.now().toString(36));
+  const [fileType, setFileType] = useState<string>("");
+  const [engine, setEngine] = useState<string>("");
+  const [parseMs, setParseMs] = useState<number | null>(null);
   const { register, setValue, watch, control } = useForm<QuoteFormValues>({
     defaultValues: { origin: { country: "AE" }, destination: { country: "RW" }, incoterm: "CIP", mode: "sea", products: [] },
   });
@@ -46,10 +52,15 @@ export default function QuoteNew() {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setFileType(file.name.split(".").pop()?.toLowerCase() ?? "");
+    setQuoteId("q" + Date.now().toString(36));
     setUploadStatus("busy"); setUploadMsg("");
     resetRates();
+    const t0 = Date.now();
     try {
       const parsed = await parseQuoteFile(file);
+      setParseMs(Date.now() - t0);
+      setEngine((parsed as any).engine ?? "");
       const rows: ProductRow[] = parsed.map((p) => ({
         name: p.name,
         sku: p.model ?? "",
@@ -150,6 +161,14 @@ export default function QuoteNew() {
         hwItems: totals.hwLines, swItems: totals.swLines, totalWeightKg: Math.round(totals.kg * 10) / 10,
         publicRates: kind === "public" ? res.rates : pub?.rates ?? [],
         specialRates: kind === "special" ? res.rates : spc?.rates ?? [],
+      });
+      const cheapest = (rs: Rate[] | undefined) => { const p = (rs ?? []).map((r) => r.price).filter((x) => x > 0); return p.length ? Math.min(...p) : null; };
+      const hw = products.filter((p) => p.itemType !== "software");
+      void logQuoteEvent({
+        quoteId, origin: originCountry, destination: destCountry, mode, incoterm, fileType: fileType || undefined, fileName: fileName || undefined, engine: engine || undefined, packaging,
+        hwLines: totals.hwLines, swLines: totals.swLines, units: totals.units, weightKg: Math.round(totals.kg * 10) / 10, volumeM3: Math.round(totals.m3 * 1000) / 1000, chargeableKg: Math.round(totals.chargeableKg * 10) / 10,
+        trust: { verified: hw.filter((p) => p.trust === "verified").length, checked: hw.filter((p) => p.trust === "checked").length, estimated: hw.filter((p) => !p.trust || p.trust === "estimated").length },
+        cheapestIndicative: cheapest(kind === "public" ? res.rates : pub?.rates), cheapestNegotiated: cheapest(kind === "special" ? res.rates : spc?.rates), parseMs,
       });
     } catch (err: any) {
       setRateErr(err?.message || "Rates could not be fetched.");
@@ -330,6 +349,8 @@ export default function QuoteNew() {
             onFetch={() => fetchRates("special")} />
         </div>
       </Stage>
+
+      <FeedbackBox key={quoteId} onSubmit={(f) => sendFeedback({ ...f, quoteId, origin: originCountry, destination: destCountry, mode })} />
     </div>
   );
 }

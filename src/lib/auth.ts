@@ -22,6 +22,16 @@ export async function getIdToken(): Promise<string | null> {
   } catch { return null; }
 }
 
+/** Cognito groups of the signed-in user (from the ID token). */
+export async function getGroups(): Promise<string[]> {
+  if (!authEnabled) return [];
+  try {
+    const s = await fetchAuthSession();
+    const g = s.tokens?.idToken?.payload?.["cognito:groups"];
+    return Array.isArray(g) ? (g as string[]) : [];
+  } catch { return []; }
+}
+
 export async function signOut() {
   if (authEnabled) await amplifySignOut();
 }
