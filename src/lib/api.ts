@@ -252,3 +252,15 @@ export async function getAdminStats(days = 30): Promise<AdminStats> {
   if (!res.ok || json?.success === false) throw new Error(json?.error || `HTTP ${res.status}`);
   return (json?.data ?? json) as AdminStats;
 }
+
+// ─── Branded quotation PDF (archived in S3, emailed via SES) ─────
+export interface QuotationRequest {
+  origin: string; destination: string; mode: string; incoterm: string; packaging: string; fileName?: string; email?: boolean;
+  items: { name: string; sku?: string; type: string; qty: number; weight_g: number; l_mm?: number; w_mm?: number; h_mm?: number; trust?: string }[];
+  totals: { hwLines: number; swLines: number; units: number; kg: number; m3: number; wm: number; chargeableKg: number; pallets?: string };
+  rate: Rate;
+}
+export interface QuotationResult { ref: string; filename: string; emailed: boolean; emailError?: string | null; to: string; from?: string | null; pdfBase64: string }
+export async function createQuotation(req: QuotationRequest): Promise<QuotationResult> {
+  return post<QuotationResult>("/quotation", req);
+}

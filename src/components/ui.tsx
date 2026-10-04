@@ -73,8 +73,10 @@ function Breakdown({ b, currency }: { b: Record<string, number | string>; curren
   );
 }
 
-export function RateColumn({ title, tone, rates, loading, message, emptyText, onFetch, buttonLabel }: {
+export function RateColumn({ title, tone, rates, loading, message, emptyText, onFetch, buttonLabel, selected, onSelect }: {
   title: string;
+  selected?: Rate | null;
+  onSelect?: (r: Rate) => void;
   tone: "public" | "special";
   rates: Rate[] | null;
   loading: boolean;
@@ -102,7 +104,7 @@ export function RateColumn({ title, tone, rates, loading, message, emptyText, on
       {!loading && rates && rates.length > 0 && (
         <ol className="rate-list">
           {rates.map((r, i) => (
-            <li key={i} className="rate">
+            <li key={i} className={`rate ${selected && selected.carrier === r.carrier && selected.price === r.price ? "rate-selected" : ""}`}>
               <div className="rate-main">
                 <div className="rate-carrier">{r.carrier}<span>{r.service}</span></div>
                 <div className="rate-price"><small>{r.currency}</small>{money.format(r.price)}</div>
@@ -118,6 +120,13 @@ export function RateColumn({ title, tone, rates, loading, message, emptyText, on
                 {i === fastest && <span className="tag tag-fast">Fastest</span>}
               </div>
               {r.breakdown && <Breakdown b={r.breakdown} currency={r.currency} />}
+              {onSelect && (
+                <div className="rate-actions">
+                  <button type="button" className={`btn btn-small ${selected && selected.carrier === r.carrier && selected.price === r.price ? (tone === "special" ? "btn-olive" : "btn-navy") : "btn-ghost"}`} onClick={() => onSelect(r)}>
+                    {selected && selected.carrier === r.carrier && selected.price === r.price ? "Selected" : "Select"}
+                  </button>
+                </div>
+              )}
               {(r.reference || r.sourceUrl) && <div className="rate-ref">{r.reference}{r.sourceUrl && <> · <a href={r.sourceUrl} target="_blank" rel="noreferrer">source ↗</a></>}</div>}
             </li>
           ))}

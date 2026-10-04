@@ -7,7 +7,7 @@ import {
   inchesToMm, lbsToGrams, type Rate, type RatesResponse, type QuoteRequestPayload,
 } from "../../lib/api";
 import { saveQuote } from "../../lib/history";
-import { logQuoteEvent, sendFeedback } from "../../lib/api";
+import { logQuoteEvent, sendFeedback, createQuotation, type QuotationResult } from "../../lib/api";
 import { FeedbackBox } from "../../components/feedback";
 import { palletise, type PackagingMode } from "../../lib/packaging";
 import { useLocations, countryName } from "../../lib/useLocations";
@@ -21,6 +21,10 @@ export default function QuoteNew() {
   const [packaging, setPackaging] = useState<PackagingMode>("loose");
   const [declared, setDeclared] = useState<string>("");
   const [quoteId, setQuoteId] = useState<string>(() => "q" + Date.now().toString(36));
+  const [selected, setSelected] = useState<Rate | null>(null);
+  const [qState, setQState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [qResult, setQResult] = useState<QuotationResult | null>(null);
+  const [qErr, setQErr] = useState("");
   const [fileType, setFileType] = useState<string>("");
   const [engine, setEngine] = useState<string>("");
   const [parseMs, setParseMs] = useState<number | null>(null);
@@ -134,7 +138,7 @@ export default function QuoteNew() {
   const [spc, setSpc] = useState<RatesResponse | null>(null);
   const [loading, setLoading] = useState<"" | "public" | "special">("");
   const [rateErr, setRateErr] = useState("");
-  const resetRates = () => { setPub(null); setSpc(null); setRateErr(""); };
+  const resetRates = () => { setPub(null); setSpc(null); setRateErr(""); setSelected(null); setQState("idle"); setQResult(null); };
 
   const payload = (): QuoteRequestPayload => ({
     items: products.filter((p) => p.name && p.qty > 0).map((p) => ({
@@ -173,6 +177,25 @@ export default function QuoteNew() {
     } catch (err: any) {
       setRateErr(err?.message || "Rates could not be fetched.");
     } finally { setLoading(""); }
+  };
+
+  const quotationPayload = (email: boolean) => ({
+    origin: originCountry, destination: destCountry, mode, incoterm, packaging, fileName: fileName || undefined, email,
+    items: products.filter((p) => p.name).map((p) => ({ name: p.name, sku: p.sku, type: p.itemType, qty: p.qty, weight_g: p.weight_g ?? 0, l_mm: p.l_mm, w_mm: p.w_mm, h_mm: p.h_mm, trust: p.trust })),
+    totals: { hwLines: totals.hwLines, swLines: totals.swLines, units: totals.units, kg: totals.kg, m3: totals.m3, wm: totals.wmUnits, chargeableKg: totals.chargeableKg,
+      pallets: totals.pallets.length ? `${totals.pallets[0].qty} pallet(s) ${totals.pallets[0].l_mm}x${totals.pallets[0].w_mm}x${totals.pallets[0].h_mm} mm` : undefined },
+    rate: selected!,
+  });
+  const downloadPdf = (r: QuotationResult) => {
+    const bytes = Uint8Array.from(atob(r.pdfBase64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a"); a.href = url; a.download = r.filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  const makeQuotation = async (email: boolean) => {
+    if (!selected) return;
+    setQState("busy"); setQErr("");
+    try { const r = await createQuotation(quotationPayload(email)); setQResult(r); setQState("done"); if (!email) downloadPdf(r); }
+    catch (e: any) { setQErr(e?.message || "Could not create the quotation"); setQState("error"); }
   };
 
   const addRow = () => append({ name: "", sku: "", qty: 1, itemType: "hardware" } as ProductRow);
@@ -341,13 +364,33 @@ export default function QuoteNew() {
             title="Indicative estimate" tone="public" buttonLabel="Get indicative rates"
             rates={pub?.rates ?? null} loading={loading === "public"} message={pub?.message}
             emptyText="Indicative only. A carrier or forwarder quote is required before booking."
-            onFetch={() => fetchRates("public")} />
+            onFetch={() => fetchRates("public")} selected={selected} onSelect={setSelected} />
           <RateColumn
             title="Your negotiated rates" tone="special" buttonLabel="Get negotiated rates"
             rates={spc?.rates ?? null} loading={loading === "special"} message={spc?.message}
             emptyText="Rates from your freight forwarder's monthly rate sheet."
-            onFetch={() => fetchRates("special")} />
+            onFetch={() => fetchRates("special")} selected={selected} onSelect={setSelected} />
         </div>
+
+        {selected && (
+          <div className="qpanel">
+            <div>
+              <div className="qpanel-t">Selected: <strong>{selected.carrier}</strong> · {selected.service} · <strong>{selected.currency} {selected.price.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong></div>
+              <div className="qpanel-s">{selected.rateType === "special" ? "Negotiated rate sheet" : "Indicative estimate — a carrier quotation is required before booking"}</div>
+            </div>
+            <div className="toolbar" style={{ margin: 0 }}>
+              <button type="button" className="btn btn-navy" onClick={() => makeQuotation(true)} disabled={qState === "busy"}>{qState === "busy" ? <Spinner label="Preparing…" /> : "Email me the quotation"}</button>
+              <button type="button" className="btn btn-ghost" onClick={() => makeQuotation(false)} disabled={qState === "busy"}>Download PDF</button>
+            </div>
+          </div>
+        )}
+        {qState === "done" && qResult && (
+          <Notice kind={qResult.emailed || !qResult.emailError ? "ok" : "warn"}>
+            Quotation <strong>{qResult.ref}</strong> created{qResult.emailed ? ` and sent to ${qResult.to}${qResult.from ? ` from ${qResult.from}` : ""}.` : qResult.emailError ? ` but the email could not be sent (${qResult.emailError}). ` : "."}{qResult.emailed && qResult.emailError ? ` Note: ${qResult.emailError}.` : ""}
+            {" "}<button type="button" className="link" onClick={() => downloadPdf(qResult)}>Download the PDF</button>
+          </Notice>
+        )}
+        {qState === "error" && <Notice kind="error">{qErr}</Notice>}
       </Stage>
 
       <FeedbackBox key={quoteId} onSubmit={(f) => sendFeedback({ ...f, quoteId, origin: originCountry, destination: destCountry, mode })} />
