@@ -38,6 +38,8 @@ export interface Rate {
   rateType?: "public" | "special";
   source?: string;
   recommended?: boolean;
+  breakdown?: Record<string, number | string>;
+  indicative?: boolean;
 }
 
 export interface RatesResponse {
@@ -61,6 +63,7 @@ export interface QuoteRequestPayload {
   items: QuoteItemPayload[];
   packages?: { l_mm: number; w_mm: number; h_mm: number; weight_g: number; qty: number; kind: string }[];
   packaging?: "loose" | "pallet";
+  declaredValue?: number;
   origin: { country: string; portId?: string };
   destination: { country: string; portId?: string };
   mode: string;
@@ -165,6 +168,8 @@ function normaliseRates(data: any): RatesResponse {
     rateType: r.rateType,
     source: r.source,
     recommended: r.recommended,
+    breakdown: r.breakdown,
+    indicative: r.indicative,
   }));
   return { rates, message: data?.message, billableWeightKg: data?.billableWeightKg, shipment: data?.shipment };
 }

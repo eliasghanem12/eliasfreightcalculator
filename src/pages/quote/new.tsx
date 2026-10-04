@@ -17,6 +17,7 @@ const num = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 export default function QuoteNew() {
   const [packaging, setPackaging] = useState<PackagingMode>("loose");
+  const [declared, setDeclared] = useState<string>("");
   const { register, setValue, watch, control } = useForm<QuoteFormValues>({
     defaultValues: { origin: { country: "AE" }, destination: { country: "RW" }, incoterm: "CIP", mode: "sea", products: [] },
   });
@@ -207,6 +208,10 @@ export default function QuoteNew() {
               </button>
             ))}
           </div>
+          <label className="field field-inline">
+            <span>Cargo value USD</span>
+            <input className="cell num" type="number" min={0} placeholder="for insurance and duties" value={declared} onChange={(e) => setDeclared(e.target.value)} style={{ width: 160 }} />
+          </label>
           <div className="seg" role="radiogroup" aria-label="Incoterm">
             {INCOTERMS.map((t) => (
               <button key={t} type="button" role="radio" aria-checked={incoterm === t} className={incoterm === t ? "on" : ""} onClick={() => setValue("incoterm", t)}>{t}</button>
@@ -303,9 +308,9 @@ export default function QuoteNew() {
         {rateErr && <Notice kind="error">{rateErr}</Notice>}
         <div className="rates-grid">
           <RateColumn
-            title="Market estimate" tone="public" buttonLabel="Get market rates"
+            title="Indicative estimate" tone="public" buttonLabel="Get indicative rates"
             rates={pub?.rates ?? null} loading={loading === "public"} message={pub?.message}
-            emptyText="AI-researched market prices for this lane. Indicative only, refreshed daily. Not a bookable quote."
+            emptyText="Indicative only. A carrier or forwarder quote is required before booking."
             onFetch={() => fetchRates("public")} />
           <RateColumn
             title="Your negotiated rates" tone="special" buttonLabel="Get negotiated rates"

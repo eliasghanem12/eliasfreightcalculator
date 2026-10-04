@@ -163,3 +163,12 @@ table.products, table.history { width: 100%; border-collapse: collapse; font-siz
 .trust-checked { background: #E8F0F8; color: var(--navy); }
 .trust-estimated { background: #FFF6DB; color: var(--warn); }
 .trust a { color: inherit; text-decoration: none; }
+
+/* breakdown + inline field */
+.field-inline { flex-direction: row; align-items: center; gap: 8px; }
+.bd { margin-top: 8px; font-size: 12.5px; }
+.bd summary { cursor: pointer; color: var(--mid); }
+.bd table { margin-top: 6px; border-collapse: collapse; width: 100%; }
+.bd td { padding: 2px 0; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.bd td.r { text-align: right; color: var(--ink); }
+.bd-note { margin: 6px 0 0; color: var(--ink-faint); font-size: 12px; }

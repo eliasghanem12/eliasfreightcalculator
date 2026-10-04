@@ -57,6 +57,22 @@ export function Stage({ n, title, hint, children }: { n: number; title: string; 
 
 const money = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
+const LABELS: Record<string, string> = { freight: "Freight", fuelSurcharge: "Fuel surcharge", originCharges: "Origin handling & docs", destCharges: "Destination handling & docs", insurance: "Cargo insurance", dutiesAndTaxes: "Duties & taxes", deliveryToDoor: "Delivery to door", incotermAddOn: "Incoterm add-on" };
+function Breakdown({ b, currency }: { b: Record<string, number | string>; currency: string }) {
+  const rows = Object.entries(b).filter(([, v]) => typeof v === "number") as [string, number][];
+  const notes = Object.entries(b).filter(([, v]) => typeof v === "string") as [string, string][];
+  if (!rows.length && !notes.length) return null;
+  return (
+    <details className="bd">
+      <summary>Cost breakdown</summary>
+      <table>
+        <tbody>{rows.map(([k, v]) => <tr key={k}><td>{LABELS[k] ?? k}</td><td className="r">{money.format(v)} {currency}</td></tr>)}</tbody>
+      </table>
+      {notes.map(([k, v]) => <p key={k} className="bd-note">{k === "units" ? v : v}</p>)}
+    </details>
+  );
+}
+
 export function RateColumn({ title, tone, rates, loading, message, emptyText, onFetch, buttonLabel }: {
   title: string;
   tone: "public" | "special";
@@ -95,10 +111,13 @@ export function RateColumn({ title, tone, rates, loading, message, emptyText, on
                 <span>Transit {r.transit}</span>
                 {r.pricePerKg != null && <span>{money.format(r.pricePerKg)}/kg</span>}
                 {r.validTo && <span>Valid to {r.validTo}</span>}
-                {r.source === "simulated" && <span className="muted">fallback estimate</span>}{(r as any).incotermNote && <span className="muted" title={(r as any).incotermNote}>{(r as any).incoterm}</span>}
+                {r.source === "tariff_model" && <span className="muted" title="FreightIQ tariff model: published lane bands, not a carrier quotation">tariff model</span>}
+                {r.source === "market_research" && <span className="muted" title="Figure found online for this lane; verify with the carrier">market research</span>}
+                {r.source === "s3_rate_sheet" && <span className="muted">rate sheet</span>}{(r as any).incotermNote && <span className="muted" title={(r as any).incotermNote}>{(r as any).incoterm}</span>}
                 {i === cheapest && isFinite(r.price) && r.price > 0 && <span className="tag tag-best">Lowest price</span>}
                 {i === fastest && <span className="tag tag-fast">Fastest</span>}
               </div>
+              {r.breakdown && <Breakdown b={r.breakdown} currency={r.currency} />}
             </li>
           ))}
         </ol>
