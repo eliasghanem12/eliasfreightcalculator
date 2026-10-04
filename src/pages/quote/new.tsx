@@ -132,6 +132,9 @@ export default function QuoteNew() {
     origin: { country: originCountry, portId: watch("origin.portId") || undefined },
     destination: { country: destCountry, portId: watch("destination.portId") || undefined },
     mode, incoterm,
+    packaging,
+    packages: totals.pallets.length ? totals.pallets : undefined,
+    declaredValue: declared ? parseFloat(declared) : undefined,
   });
 
   const canQuote = totals.hwLines > 0 && !!originCountry && !!destCountry;
