@@ -106,8 +106,10 @@ export async function parseQuoteFile(file: File): Promise<ParsedProduct[]> {
   } else {
     body = { content: trimLegalText(await file.text()) };
   }
-  const data = await post<{ items: ParsedProduct[] }>("/parse", body);
-  return data.items ?? [];
+  const data = await post<{ items: ParsedProduct[]; engine?: string }>("/parse", body);
+  const items = (data.items ?? []) as ParsedProduct[] & { engine?: string };
+  items.engine = data.engine;           // carried along for usage reporting
+  return items;
 }
 
 // Strip terms-and-conditions boilerplate so long vendor quotes stay under the API time limit.
