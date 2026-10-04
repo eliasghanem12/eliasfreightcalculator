@@ -40,6 +40,9 @@ export interface Rate {
   recommended?: boolean;
   breakdown?: Record<string, number | string>;
   indicative?: boolean;
+  reference?: string | null;
+  sourceUrl?: string | null;
+  transitBasis?: string | null;
 }
 
 export interface RatesResponse {
@@ -170,6 +173,9 @@ function normaliseRates(data: any): RatesResponse {
     recommended: r.recommended,
     breakdown: r.breakdown,
     indicative: r.indicative,
+    reference: r.reference,
+    sourceUrl: r.sourceUrl,
+    transitBasis: r.transitBasis,
   }));
   return { rates, message: data?.message, billableWeightKg: data?.billableWeightKg, shipment: data?.shipment };
 }
@@ -181,7 +187,7 @@ export function inchesToMm(dims: string | null | undefined): { l_mm?: number; w_
   if (parts.length !== 3 || parts.some((n) => !isFinite(n))) return {};
   return { l_mm: Math.round(parts[0] * 25.4), w_mm: Math.round(parts[1] * 25.4), h_mm: Math.round(parts[2] * 25.4) };
 }
-export const lbsToGrams = (lbs: number) => Math.round(lbs * 453.592);
+export const lbsToGrams = (lbs: number) => Math.round(lbs * 453.592 / 100) * 100; // 0.1 kg precision, matches what is displayed
 
 // Parse the first number out of a transit string like "3-5 days" or "By 10:30 next business day".
 export function transitDaysOf(transit: string): number {

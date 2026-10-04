@@ -108,7 +108,7 @@ export function RateColumn({ title, tone, rates, loading, message, emptyText, on
                 <div className="rate-price"><small>{r.currency}</small>{money.format(r.price)}</div>
               </div>
               <div className="rate-meta">
-                <span>Transit {r.transit}</span>
+                <span title={r.transitBasis ?? undefined}>Transit {r.transit}{r.transitBasis ? " ·ⓘ" : ""}</span>
                 {r.pricePerKg != null && <span>{money.format(r.pricePerKg)}/kg</span>}
                 {r.validTo && <span>Valid to {r.validTo}</span>}
                 {r.source === "tariff_model" && <span className="muted" title="FreightIQ tariff model: published lane bands, not a carrier quotation">tariff model</span>}
@@ -118,6 +118,7 @@ export function RateColumn({ title, tone, rates, loading, message, emptyText, on
                 {i === fastest && <span className="tag tag-fast">Fastest</span>}
               </div>
               {r.breakdown && <Breakdown b={r.breakdown} currency={r.currency} />}
+              {(r.reference || r.sourceUrl) && <div className="rate-ref">{r.reference}{r.sourceUrl && <> · <a href={r.sourceUrl} target="_blank" rel="noreferrer">source ↗</a></>}</div>}
             </li>
           ))}
         </ol>

@@ -172,3 +172,6 @@ table.products, table.history { width: 100%; border-collapse: collapse; font-siz
 .bd td { padding: 2px 0; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .bd td.r { text-align: right; color: var(--ink); }
 .bd-note { margin: 6px 0 0; color: var(--ink-faint); font-size: 12px; }
+
+.rate-ref { margin-top: 6px; font-size: 11.5px; color: var(--ink-faint); }
+.rate-ref a { color: var(--mid); }

@@ -58,6 +58,9 @@ export default function QuoteNew() {
         ...(p.type === "hardware" ? inchesToMm(p.dimensions) : {}),
         weight_g: p.type === "hardware" && p.weight > 0 ? lbsToGrams(p.weight) : undefined,
         dimSource: p.dimSource ?? undefined,
+        trust: p.trust ?? (p.dimSource === "fallback" ? "estimated" : undefined),
+        basis: p.basis ?? undefined,
+        source: p.source ?? undefined,
       }));
       setValue("products", rows);
       const hw = rows.filter((r) => r.itemType === "hardware").length;
@@ -111,7 +114,8 @@ export default function QuoteNew() {
     const volKg = m3 * (mode === "air" || mode === "courier" ? 167 : mode === "road" ? 333 : 1000);
     const missing = hw.filter((p) => !p.weight_g || !p.l_mm).length;
     const chargeableKg = mode === "sea" ? Math.max(kg, volKg, 1000) : Math.max(kg, volKg);
-    return { hwLines: hw.length, swLines: products.length - hw.length, units, kg, m3, cartonKg, cartonM3, pallets, chargeableKg, missing, seaMin: mode === "sea" && Math.max(kg, volKg) < 1000 };
+    const wmUnits = Math.max(1, m3, kg / 1000);
+    return { hwLines: hw.length, swLines: products.length - hw.length, units, kg, m3, cartonKg, cartonM3, pallets, chargeableKg, wmUnits, missing, seaMin: mode === "sea" && Math.max(kg, volKg) < 1000 };
   }, [products, mode, packaging]);
 
   // ── Rates ───────────────────────────────────────────────────────
@@ -293,7 +297,7 @@ export default function QuoteNew() {
                   <td className="r">{totals.units}</td>
                   <td className="r">{num.format(totals.kg)} kg</td>
                   <td colSpan={2}>
-                    {totals.pallets.length > 0 && <span>{totals.pallets[0].qty} pallet{totals.pallets[0].qty === 1 ? "" : "s"} {totals.pallets[0].l_mm}×{totals.pallets[0].w_mm}×{totals.pallets[0].h_mm}, {num.format(totals.pallets[0].weight_g / 1000)} kg each · </span>}{totals.m3.toFixed(3)} m³ · chargeable {num.format(totals.chargeableKg)} kg ({mode === "air" || mode === "courier" ? "167 kg/m³" : mode === "road" ? "333 kg/m³" : "W/M, min 1 CBM"}){totals.seaMin && <span className="muted"> · below the 1 CBM minimum</span>}
+                    {totals.pallets.length > 0 && <span>{totals.pallets[0].qty} pallet{totals.pallets[0].qty === 1 ? "" : "s"} {totals.pallets[0].l_mm}×{totals.pallets[0].w_mm}×{totals.pallets[0].h_mm}, {num.format(totals.pallets[0].weight_g / 1000)} kg each · </span>}{totals.m3.toFixed(3)} m³ · {mode === "sea" ? <>billable LCL quantity {totals.wmUnits.toFixed(4)} W/M units (1 m³ or 1,000 kg, min 1)</> : <>chargeable {num.format(totals.chargeableKg)} kg ({mode === "air" || mode === "courier" ? "167 kg/m³" : "333 kg/m³"})</>}{totals.seaMin && <span className="muted"> · minimum applied</span>}
                     {totals.missing > 0 && <span className="warn"> · {totals.missing} line{totals.missing === 1 ? "" : "s"} missing weight or size</span>}
                   </td>
                 </tr>
@@ -304,7 +308,7 @@ export default function QuoteNew() {
       </Stage>
 
       {/* ── 3. Rates ────────────────────────────────────────────── */}
-      <Stage n={3} title="Rates" hint={`${countryName(loc, originCountry)} → ${countryName(loc, destCountry)}, ${mode}, ${incoterm}. Chargeable weight ${num.format(totals.chargeableKg)} kg.`}>
+      <Stage n={3} title="Rates" hint={`${countryName(loc, originCountry)} → ${countryName(loc, destCountry)}, ${mode}, ${incoterm}. ${mode === "sea" ? `Billable ${totals.wmUnits.toFixed(4)} W/M units` : `Chargeable weight ${num.format(totals.chargeableKg)} kg`}.`}>
         {rateErr && <Notice kind="error">{rateErr}</Notice>}
         <div className="rates-grid">
           <RateColumn
