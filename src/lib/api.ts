@@ -18,7 +18,10 @@ export interface ParsedProduct {
   unitPrice: number;
   dimensions: string | null; // "L x W x H in"
   weight: number;            // lbs per unit
-  dimSource?: string | null; // "verified" | "fallback" | "cache"
+  dimSource?: string | null; // "verified" | "checked" | "fallback"
+  trust?: "verified" | "checked" | "estimated" | null;
+  basis?: string | null;       // carton | chassis+uplift | category
+  source?: string | null;      // URL the lookup used
 }
 
 export interface Rate {

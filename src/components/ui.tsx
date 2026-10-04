@@ -21,6 +21,20 @@ export function TypeBadge({ type }: { type: "hardware" | "software" }) {
   );
 }
 
+export function TrustBadge({ trust, basis, source }: { trust?: string | null; basis?: string | null; source?: string | null }) {
+  if (!trust) return null;
+  const label = trust === "verified" ? "Verified" : trust === "checked" ? "Checked" : "Estimated";
+  const title = trust === "verified" ? "Found on the manufacturer page, passed the size check, and a second model agreed"
+    : trust === "checked" ? "Found online and passed the size check; second opinion unavailable or disagreed"
+    : "No reliable figure found; category estimate. Edit if you know the packed size.";
+  const b = basis === "chassis+uplift" ? " · carton from chassis" : basis === "carton" ? " · carton" : "";
+  return (
+    <span className={`trust trust-${trust}`} title={title + b}>
+      {label}{source ? <a href={source} target="_blank" rel="noreferrer" aria-label="Source page"> ↗</a> : null}
+    </span>
+  );
+}
+
 export function Notice({ kind, children }: { kind: "error" | "warn" | "ok"; children: ReactNode }) {
   return <div className={`notice notice-${kind}`} role={kind === "error" ? "alert" : "status"}>{children}</div>;
 }

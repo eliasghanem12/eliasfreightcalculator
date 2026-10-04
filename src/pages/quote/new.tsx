@@ -8,7 +8,7 @@ import {
 } from "../../lib/api";
 import { saveQuote } from "../../lib/history";
 import { useLocations, countryName } from "../../lib/useLocations";
-import { Stage, Spinner, TypeBadge, Notice, RateColumn } from "../../components/ui";
+import { Stage, Spinner, TypeBadge, Notice, RateColumn, TrustBadge } from "../../components/ui";
 
 const INCOTERMS = ["EXW", "FOB", "CIF", "CIP", "DDP"] as const;
 const MODES = ["air", "sea", "road", "courier"] as const;
@@ -85,6 +85,9 @@ export default function QuoteNew() {
         if (mm.l_mm) { setValue(`products.${idx}.l_mm`, mm.l_mm); setValue(`products.${idx}.w_mm`, mm.w_mm); setValue(`products.${idx}.h_mm`, mm.h_mm); }
         if (r.weight > 0) setValue(`products.${idx}.weight_g`, lbsToGrams(r.weight));
         setValue(`products.${idx}.dimSource`, r.dimSource ?? undefined);
+        setValue(`products.${idx}.trust`, r.trust ?? undefined);
+        setValue(`products.${idx}.basis`, r.basis ?? undefined);
+        setValue(`products.${idx}.source`, r.source ?? undefined);
         if (r.model && !sku) setValue(`products.${idx}.sku`, r.model);
       }
     } catch (err: any) {
@@ -98,9 +101,10 @@ export default function QuoteNew() {
     const units = hw.reduce((s, p) => s + (p.qty || 0), 0);
     const kg = hw.reduce((s, p) => s + ((p.weight_g || 0) / 1000) * (p.qty || 0), 0);
     const m3 = hw.reduce((s, p) => s + ((p.l_mm || 0) * (p.w_mm || 0) * (p.h_mm || 0) / 1e9) * (p.qty || 0), 0);
-    const volKg = m3 * (mode === "air" || mode === "courier" ? 167 : 1000);
+    const volKg = m3 * (mode === "air" || mode === "courier" ? 167 : mode === "road" ? 333 : 1000);
     const missing = hw.filter((p) => !p.weight_g || !p.l_mm).length;
-    return { hwLines: hw.length, swLines: products.length - hw.length, units, kg, m3, chargeableKg: Math.max(kg, volKg), missing };
+    const chargeableKg = mode === "sea" ? Math.max(kg, volKg, 1000) : Math.max(kg, volKg);
+    return { hwLines: hw.length, swLines: products.length - hw.length, units, kg, m3, chargeableKg, missing, seaMin: mode === "sea" && Math.max(kg, volKg) < 1000 };
   }, [products, mode]);
 
   // ── Rates ───────────────────────────────────────────────────────
@@ -252,7 +256,7 @@ export default function QuoteNew() {
                       </td>
                       <td className="dims">
                         {sw ? <span className="muted">No shipping</span> : hasDims ? (
-                          <span className="mono">{row.l_mm} × {row.w_mm} × {row.h_mm}{row.dimSource === "fallback" && <em title="Estimated from product category; edit if you know better"> est.</em>}</span>
+                          <span className="mono">{row.l_mm} × {row.w_mm} × {row.h_mm} <TrustBadge trust={row.trust ?? (row.dimSource === "fallback" ? "estimated" : undefined)} basis={row.basis} source={row.source} /></span>
                         ) : <span className="muted">—</span>}
                         {rowErr[i] && <div className="row-err">{rowErr[i]}</div>}
                       </td>
@@ -274,7 +278,7 @@ export default function QuoteNew() {
                   <td className="r">{totals.units}</td>
                   <td className="r">{num.format(totals.kg)} kg</td>
                   <td colSpan={2}>
-                    {num.format(totals.m3 * 1000) } L · chargeable {num.format(totals.chargeableKg)} kg ({mode === "air" || mode === "courier" ? "167" : "1000"} kg/m³)
+                    {totals.m3.toFixed(3)} m³ · chargeable {num.format(totals.chargeableKg)} kg ({mode === "air" || mode === "courier" ? "167 kg/m³" : mode === "road" ? "333 kg/m³" : "W/M, min 1 CBM"}){totals.seaMin && <span className="muted"> · below the 1 CBM minimum</span>}
                     {totals.missing > 0 && <span className="warn"> · {totals.missing} line{totals.missing === 1 ? "" : "s"} missing weight or size</span>}
                   </td>
                 </tr>

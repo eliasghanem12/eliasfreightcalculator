@@ -10,6 +10,9 @@ export const productSchema = z.object({
   h_mm: z.number().positive().optional(),
   weight_g: z.number().nonnegative().optional(),
   dimSource: z.string().optional(),
+  trust: z.string().optional(),
+  basis: z.string().optional(),
+  source: z.string().optional(),
 });
 
 export const quoteSchema = z.object({
