@@ -159,10 +159,14 @@ export default function QuoteNew() {
   const firstRun = useRef(true);
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
-    if (pub) fetchRates("public");
-    if (spc) fetchRates("special");
+    // debounce so typing a cargo value doesn't fire a request per keystroke
+    const t = setTimeout(() => {
+      if (pub) fetchRates("public");
+      if (spc) fetchRates("special");
+    }, 600);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incoterm, mode, packaging]);
+  }, [incoterm, mode, packaging, declared]);
 
   return (
     <div className="page">
@@ -214,7 +218,7 @@ export default function QuoteNew() {
           </div>
           <label className="field field-inline">
             <span>Cargo value USD</span>
-            <input className="cell num" type="number" min={0} placeholder="for insurance and duties" value={declared} onChange={(e) => setDeclared(e.target.value)} style={{ width: 160 }} />
+            <input className="cell num" type="number" min={0} placeholder="e.g. 192680" title="Used for cargo insurance (0.35%, min USD 25) and duties (5%) on CIF/CIP/DDP" value={declared} onChange={(e) => setDeclared(e.target.value)} style={{ width: 160 }} />
           </label>
           <div className="seg" role="radiogroup" aria-label="Incoterm">
             {INCOTERMS.map((t) => (
