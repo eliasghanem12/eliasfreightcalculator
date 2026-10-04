@@ -6,6 +6,9 @@ import { Notice, Spinner } from "../components/ui";
 
 const NAVY = "#164C82", OLIVE = "#809725", MID = "#54A4E2", WARN = "#D99A1A", RED = "#A32D2D", GREY = "#B9C2CE";
 const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const usd = (v: number | null | undefined) => v == null ? "—" : v < 0.01 ? `$${v.toFixed(4)}` : v < 1 ? `$${v.toFixed(3)}` : `$${v.toFixed(2)}`;
+const tok = (v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(v);
+const short = (m: string) => m.replace(/^(us|global)\./, "").replace(/-\d{8}-v\d:\d$/, "");
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -48,6 +51,8 @@ export default function Dashboard() {
         <Kpi label="Dimensions with a source" value={k.verifiedRate == null ? "—" : `${k.verifiedRate}%`} hint="verified or checked, not estimated" />
         <Kpi label="Avg shipment" value={`${fmt.format(k.avgWeightKg)} kg`} />
         <Kpi label="Used negotiated rates" value={k.quotes ? `${Math.round(100 * k.withNegotiated / k.quotes)}%` : "—"} />
+        <Kpi label="AI spend (Bedrock)" value={usd(data.ai?.total.cost)} hint={`${tok(data.ai?.total.tokIn ?? 0)} in · ${tok(data.ai?.total.tokOut ?? 0)} out · ${data.ai?.total.calls ?? 0} calls`} />
+        <Kpi label="AI cost per quote" value={usd(data.ai?.total.costPerQuote)} hint="list price, on-demand" />
       </div>
 
       <div className="dgrid">
@@ -87,6 +92,23 @@ export default function Dashboard() {
           <table className="history"><tbody>{data.byUser.map((u) => <tr key={u.key}><td>{u.key}</td><td className="r">{u.count}</td></tr>)}</tbody></table>
           <div className="dsmall">Files: {data.byFile.map((f) => `${f.key} ${f.count}`).join(" · ")} · Incoterms: {data.byIncoterm.map((f) => `${f.key} ${f.count}`).join(" · ")}</div>
           <div className="dsmall">Engines: {data.engines.map((f) => `${f.key} ${f.count}`).join(" · ")}</div>
+        </Card>
+
+        <Card title="AI spend by user (FinOps)" span={2}>
+          <div className="table-wrap"><table className="history">
+            <thead><tr><th>User</th><th className="r">Quotes</th><th className="r">AI requests</th><th className="r">Model calls</th><th className="r">Tokens in</th><th className="r">Tokens out</th><th className="r">Cost</th><th className="r">Per quote</th></tr></thead>
+            <tbody>{(data.ai?.byUser ?? []).map((u) => (
+              <tr key={u.user}><td>{u.user}</td><td className="r">{u.quotes}</td><td className="r">{u.requests}</td><td className="r">{u.calls}</td><td className="r">{tok(u.tokIn)}</td><td className="r">{tok(u.tokOut)}</td><td className="r"><strong>{usd(u.cost)}</strong></td><td className="r">{usd(u.costPerQuote)}</td></tr>
+            ))}</tbody>
+          </table></div>
+          <div className="dsmall">{data.ai?.note}</div>
+        </Card>
+        <Card title="AI spend by model">
+          <table className="history"><thead><tr><th>Model</th><th className="r">Calls</th><th className="r">Cost</th></tr></thead>
+            <tbody>{(data.ai?.byModel ?? []).map((m) => <tr key={m.model}><td className="mono" style={{ fontSize: 12 }}>{short(m.model)}</td><td className="r">{m.calls}</td><td className="r">{usd(m.cost)}</td></tr>)}</tbody></table>
+          <ResponsiveContainer width="100%" height={120}>
+            <BarChart data={data.series}><XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d) => d.slice(5)} /><YAxis tick={{ fontSize: 10 }} /><Tooltip formatter={(v: number) => usd(v)} /><Bar dataKey="cost" name="USD" fill={OLIVE} /></BarChart>
+          </ResponsiveContainer>
         </Card>
 
         <Card title="Recent feedback" span={3}>

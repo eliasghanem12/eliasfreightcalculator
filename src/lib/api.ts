@@ -235,7 +235,8 @@ export async function sendFeedback(p: { quoteId?: string; thumbs: "up" | "down";
 export interface AdminStats {
   days: number; since: string;
   kpis: { quotes: number; users: number; feedback: number; satisfaction: number | null; verifiedRate: number | null; avgWeightKg: number; hwLines: number; swLines: number; withNegotiated: number };
-  series: { day: string; quotes: number; up: number; down: number }[];
+  series: { day: string; quotes: number; up: number; down: number; cost: number }[];
+  ai: { total: { calls: number; tokIn: number; tokOut: number; cost: number; requests: number; costPerQuote: number | null }; byUser: { user: string; quotes: number; requests: number; calls: number; tokIn: number; tokOut: number; cost: number; costPerQuote: number | null }[]; byModel: { model: string; calls: number; tokIn: number; tokOut: number; cost: number }[]; note: string };
   byMode: { key: string; count: number }[]; byLane: { key: string; count: number }[]; byUser: { key: string; count: number }[];
   byIncoterm: { key: string; count: number }[]; byFile: { key: string; count: number }[]; engines: { key: string; count: number }[];
   trust: { verified: number; checked: number; estimated: number };

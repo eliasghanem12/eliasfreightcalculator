@@ -188,7 +188,7 @@ table.products, table.history { width: 100%; border-collapse: collapse; font-siz
 
 /* dashboard */
 .page-wide { max-width: 1280px; }
-.kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
 .kpi-v { font-size: 26px; font-weight: 600; color: var(--navy-ink); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .kpi-l { font-size: 13px; color: var(--ink-soft); margin-top: 2px; }
