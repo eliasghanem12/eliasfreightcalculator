@@ -23,8 +23,9 @@ export function TypeBadge({ type }: { type: "hardware" | "software" }) {
 
 export function TrustBadge({ trust, basis, source }: { trust?: string | null; basis?: string | null; source?: string | null }) {
   if (!trust) return null;
+  if (trust === "verified" && basis === "chassis+uplift") trust = "checked";
   const label = trust === "verified" ? "Verified" : trust === "checked" ? "Checked" : "Estimated";
-  const title = trust === "verified" ? "Found on the manufacturer page, passed the size check, and a second model agreed"
+  const title = trust === "verified" ? "Manufacturer-published packed data with a source; passed the size check and a second model agreed"
     : trust === "checked" ? "Found online and passed the size check; second opinion unavailable or disagreed"
     : "No reliable figure found; category estimate. Edit if you know the packed size.";
   const b = basis === "chassis+uplift" ? " · carton from chassis" : basis === "carton" ? " · carton" : "";

@@ -7,6 +7,7 @@ import {
   inchesToMm, lbsToGrams, type Rate, type RatesResponse, type QuoteRequestPayload,
 } from "../../lib/api";
 import { saveQuote } from "../../lib/history";
+import { palletise, type PackagingMode } from "../../lib/packaging";
 import { useLocations, countryName } from "../../lib/useLocations";
 import { Stage, Spinner, TypeBadge, Notice, RateColumn, TrustBadge } from "../../components/ui";
 
@@ -15,6 +16,7 @@ const MODES = ["air", "sea", "road", "courier"] as const;
 const num = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 
 export default function QuoteNew() {
+  const [packaging, setPackaging] = useState<PackagingMode>("loose");
   const { register, setValue, watch, control } = useForm<QuoteFormValues>({
     defaultValues: { origin: { country: "AE" }, destination: { country: "RW" }, incoterm: "CIP", mode: "sea", products: [] },
   });
@@ -99,13 +101,17 @@ export default function QuoteNew() {
   const totals = useMemo(() => {
     const hw = products.filter((p) => p.itemType !== "software");
     const units = hw.reduce((s, p) => s + (p.qty || 0), 0);
-    const kg = hw.reduce((s, p) => s + ((p.weight_g || 0) / 1000) * (p.qty || 0), 0);
-    const m3 = hw.reduce((s, p) => s + ((p.l_mm || 0) * (p.w_mm || 0) * (p.h_mm || 0) / 1e9) * (p.qty || 0), 0);
+    const cartons = hw.map((p) => ({ l_mm: p.l_mm || 0, w_mm: p.w_mm || 0, h_mm: p.h_mm || 0, weight_g: p.weight_g || 0, qty: p.qty || 0 }));
+    const cartonKg = cartons.reduce((s, c) => s + (c.weight_g / 1000) * c.qty, 0);
+    const cartonM3 = cartons.reduce((s, c) => s + (c.l_mm * c.w_mm * c.h_mm / 1e9) * c.qty, 0);
+    const pallets = packaging === "pallet" ? palletise(cartons) : [];
+    const kg = pallets.length ? pallets.reduce((s, p) => s + (p.weight_g / 1000) * p.qty, 0) : cartonKg;
+    const m3 = pallets.length ? pallets.reduce((s, p) => s + (p.l_mm * p.w_mm * p.h_mm / 1e9) * p.qty, 0) : cartonM3;
     const volKg = m3 * (mode === "air" || mode === "courier" ? 167 : mode === "road" ? 333 : 1000);
     const missing = hw.filter((p) => !p.weight_g || !p.l_mm).length;
     const chargeableKg = mode === "sea" ? Math.max(kg, volKg, 1000) : Math.max(kg, volKg);
-    return { hwLines: hw.length, swLines: products.length - hw.length, units, kg, m3, chargeableKg, missing, seaMin: mode === "sea" && Math.max(kg, volKg) < 1000 };
-  }, [products, mode]);
+    return { hwLines: hw.length, swLines: products.length - hw.length, units, kg, m3, cartonKg, cartonM3, pallets, chargeableKg, missing, seaMin: mode === "sea" && Math.max(kg, volKg) < 1000 };
+  }, [products, mode, packaging]);
 
   // ── Rates ───────────────────────────────────────────────────────
   const [pub, setPub] = useState<RatesResponse | null>(null);
@@ -151,7 +157,7 @@ export default function QuoteNew() {
     if (pub) fetchRates("public");
     if (spc) fetchRates("special");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [incoterm, mode]);
+  }, [incoterm, mode, packaging]);
 
   return (
     <div className="page">
@@ -217,6 +223,10 @@ export default function QuoteNew() {
             {uploadStatus === "busy" ? <Spinner label="Reading quotation…" /> : "Upload quotation"}
           </button>
           <button type="button" className="btn btn-ghost" onClick={addRow}>Add a product</button>
+          <div className="seg" role="radiogroup" aria-label="Packaging">
+            <button type="button" role="radio" aria-checked={packaging === "loose"} className={packaging === "loose" ? "on" : ""} onClick={() => setPackaging("loose")}>Loose cartons</button>
+            <button type="button" role="radio" aria-checked={packaging === "pallet"} className={packaging === "pallet" ? "on" : ""} onClick={() => setPackaging("pallet")}>Palletised</button>
+          </div>
           {fileName && <span className="file-name">{fileName}</span>}
         </div>
         {uploadStatus === "done" && <Notice kind="ok">{uploadMsg}</Notice>}
@@ -231,7 +241,7 @@ export default function QuoteNew() {
           <div className="table-wrap">
             <table className="products">
               <thead>
-                <tr><th>Type</th><th>Product</th><th>SKU</th><th className="r">Qty</th><th className="r">Unit kg</th><th>L × W × H mm</th><th></th></tr>
+                <tr><th>Type</th><th>Product</th><th>SKU</th><th className="r">Qty</th><th className="r">Packed kg/unit</th><th>Packed L × W × H mm</th><th></th></tr>
               </thead>
               <tbody>
                 {fields.map((f, i) => {
@@ -278,7 +288,7 @@ export default function QuoteNew() {
                   <td className="r">{totals.units}</td>
                   <td className="r">{num.format(totals.kg)} kg</td>
                   <td colSpan={2}>
-                    {totals.m3.toFixed(3)} m³ · chargeable {num.format(totals.chargeableKg)} kg ({mode === "air" || mode === "courier" ? "167 kg/m³" : mode === "road" ? "333 kg/m³" : "W/M, min 1 CBM"}){totals.seaMin && <span className="muted"> · below the 1 CBM minimum</span>}
+                    {totals.pallets.length > 0 && <span>{totals.pallets[0].qty} pallet{totals.pallets[0].qty === 1 ? "" : "s"} {totals.pallets[0].l_mm}×{totals.pallets[0].w_mm}×{totals.pallets[0].h_mm}, {num.format(totals.pallets[0].weight_g / 1000)} kg each · </span>}{totals.m3.toFixed(3)} m³ · chargeable {num.format(totals.chargeableKg)} kg ({mode === "air" || mode === "courier" ? "167 kg/m³" : mode === "road" ? "333 kg/m³" : "W/M, min 1 CBM"}){totals.seaMin && <span className="muted"> · below the 1 CBM minimum</span>}
                     {totals.missing > 0 && <span className="warn"> · {totals.missing} line{totals.missing === 1 ? "" : "s"} missing weight or size</span>}
                   </td>
                 </tr>

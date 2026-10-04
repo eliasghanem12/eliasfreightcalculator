@@ -59,6 +59,8 @@ export interface QuoteItemPayload {
 
 export interface QuoteRequestPayload {
   items: QuoteItemPayload[];
+  packages?: { l_mm: number; w_mm: number; h_mm: number; weight_g: number; qty: number; kind: string }[];
+  packaging?: "loose" | "pallet";
   origin: { country: string; portId?: string };
   destination: { country: string; portId?: string };
   mode: string;
